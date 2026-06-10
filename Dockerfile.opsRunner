@@ -1,0 +1,37 @@
+# anchor-ops-runner image (Cloud Run Job).
+#
+# Subscribes to Pub/Sub `ops-runner`, calls executeRun(runId) per message.
+# Server-only — no frontend build. argon2/ssh2 are compiled in the build stage
+# (the runner transitively imports server/services/security/* and the Kinsta
+# SSH client).
+
+FROM node:20-bullseye AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    g++ \
+    make \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json yarn.lock .yarnrc.yml ./
+
+RUN corepack enable \
+  && yarn install --immutable
+
+COPY . .
+
+FROM node:20-bullseye-slim AS production
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/.env.public ./.env.public
+COPY --from=build /app/server ./server
+
+# No HTTP listener — Cloud Run Job tasks exit when the runner's main() resolves.
+CMD ["node", "server/jobs/opsRunner.js"]

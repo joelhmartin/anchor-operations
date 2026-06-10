@@ -1,0 +1,159 @@
+// paper and background
+$paper: #ffffff;
+
+// primary (updated to a proper Material-style aqua scale)
+// original main was #2196f3, so these values mirror that lightness pattern
+$primaryLight: #b8f3f5;   // similar brightness to #e3f2fd
+$primaryMain: #03a4b5;    // your chosen main
+$primaryDark: #06afb5;    // similar ratio to #1e88e5
+$primary200: #7ce6ea;     // parallel to #90caf9
+$primary800: #03666a;     // parallel to #1565c0
+
+// secondary (neutral black and mid greys)
+// replacing purple tones with a real neutral scale that mirrors the original lightness steps
+$secondaryLight: #f2f4f7;  // similar to #ede7f6 but neutral
+$secondaryMain: #005baa;   // your requested black
+$secondaryDark: #188bb6;   // darker than main, matches original contrast
+$secondary200: #26e2ff;    // matches #b39ddb in brightness, but neutral
+$secondary800: #0e003f;    // matches original depth but neutral
+
+// success Colors (unchanged)
+$successLight: #b9f6ca;
+$success200: #69f0ae;
+$successMain: #00e676;
+$successDark: #00c853;
+
+// error (unchanged)
+$errorLight: #ef9a9a;
+$errorMain: #f44336;
+$errorDark: #c62828;
+
+// orange (unchanged)
+$orangeLight: #fbe9e7;
+$orangeMain: #ffab91;
+$orangeDark: #d84315;
+
+// warning (unchanged)
+$warningLight: #fff8e1;
+$warningMain: #ffe57f;
+$warningDark: #ffc107;
+
+// grey (unchanged)
+$grey50: #f8fafc;
+$grey100: #eef2f6;
+$grey200: #e3e8ef;
+$grey300: #cdd5df;
+$grey500: #697586;
+$grey600: #4b5565;
+$grey700: #364152;
+$grey900: #121926;
+
+// ==============================|| DARK THEME VARIANTS ||============================== //
+
+// dark background and paper (anchored to your black theme)
+$darkBackground: #121212;
+$darkPaper: #1e1e1e;
+
+// dark levels
+$darkLevel1: #1a1a1a;
+$darkLevel2: #0d0d0d;
+
+// primary dark mirroring the light values above
+$darkPrimaryLight: #b8f3f5;
+$darkPrimaryMain: #06afb5;
+$darkPrimaryDark: #04858a;
+$darkPrimary200: #7ce6ea;
+$darkPrimary800: #03666a;
+
+// secondary dark (neutral greys, matching the light spectrum)
+$darkSecondaryLight: #d0d5db;
+$darkSecondaryMain: #121212;
+$darkSecondaryDark: #0d0d0d;
+$darkSecondary200: #a8afb9;
+$darkSecondary800: #1a1a1a;
+
+// text variants for dark mode
+$darkTextTitle: #e5e5e5;
+$darkTextPrimary: #cfcfcf;
+$darkTextSecondary: #9d9d9d;
+
+// ==============================|| JAVASCRIPT ||============================== //
+
+:export {
+  // paper & background
+  paper: $paper;
+
+  // primary
+  primaryLight: $primaryLight;
+  primary200: $primary200;
+  primaryMain: $primaryMain;
+  primaryDark: $primaryDark;
+  primary800: $primary800;
+
+  // secondary
+  secondaryLight: $secondaryLight;
+  secondary200: $secondary200;
+  secondaryMain: $secondaryMain;
+  secondaryDark: $secondaryDark;
+  secondary800: $secondary800;
+
+  // success
+  successLight: $successLight;
+  success200: $success200;
+  successMain: $successMain;
+  successDark: $successDark;
+
+  // error
+  errorLight: $errorLight;
+  errorMain: $errorMain;
+  errorDark: $errorDark;
+
+  // orange
+  orangeLight: $orangeLight;
+  orangeMain: $orangeMain;
+  orangeDark: $orangeDark;
+
+  // warning
+  warningLight: $warningLight;
+  warningMain: $warningMain;
+  warningDark: $warningDark;
+
+  // grey
+  grey50: $grey50;
+  grey100: $grey100;
+  grey200: $grey200;
+  grey300: $grey300;
+  grey500: $grey500;
+  grey600: $grey600;
+  grey700: $grey700;
+  grey900: $grey900;
+
+  // ==============================|| DARK THEME VARIANTS ||============================== //
+
+  // paper & background
+  darkPaper: $darkPaper;
+  darkBackground: $darkBackground;
+
+  // dark 800 & 900
+  darkLevel1: $darkLevel1;
+  darkLevel2: $darkLevel2;
+
+  // text variants
+  darkTextTitle: $darkTextTitle;
+  darkTextPrimary: $darkTextPrimary;
+  darkTextSecondary: $darkTextSecondary;
+
+  // primary dark
+  darkPrimaryLight: $darkPrimaryLight;
+  darkPrimaryMain: $darkPrimaryMain;
+  darkPrimaryDark: $darkPrimaryDark;
+  darkPrimary200: $darkPrimary200;
+  darkPrimary800: $darkPrimary800;
+
+  // secondary dark
+  darkSecondaryLight: $darkSecondaryLight;
+  darkSecondaryMain: $darkSecondaryMain;
+  darkSecondaryDark: $darkSecondaryDark;
+  darkSecondary200: $darkSecondary200;
+  darkSecondary800: $darkSecondary800;
+}

@@ -1,0 +1,13 @@
+.git
+.gitignore
+node_modules
+dist
+uploads
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+*.log
+.env
+.env.*
+!.env.public
+uploads/*
