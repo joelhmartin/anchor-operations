@@ -4,6 +4,9 @@ import { getDeviceId } from './deviceId';
 import { getAccessToken, setAccessToken } from './tokenStore';
 
 const API_BASE = import.meta.env.VITE_APP_API_BASE || '/api';
+// Cross-app SSO: refresh against the dashboard when configured (same-site cookie).
+const MAIN_APP_URL = (import.meta.env.VITE_MAIN_APP_URL || '').replace(/\/$/, '');
+const REFRESH_URL = MAIN_APP_URL ? `${MAIN_APP_URL}/api/auth/refresh` : `${API_BASE}/auth/refresh`;
 
 const client = axios.create({
   baseURL: API_BASE,
@@ -51,7 +54,7 @@ async function refreshAccessToken() {
     try {
       const deviceId = getDeviceId();
       const response = await axios.post(
-        `${API_BASE}/auth/refresh`,
+        REFRESH_URL,
         {},
         {
           withCredentials: true,

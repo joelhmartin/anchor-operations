@@ -156,22 +156,47 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    authApi
-      .refreshSession()
-      .then((res) => {
-        if (res?.accessToken) {
-          setAccessToken(res.accessToken);
-          applyAuthResponse(res);
-          startRefreshInterval();
-        } else {
-          setUser(null);
-        }
-      })
-      .catch(() => {
-        clearAccessToken();
-        setUser(null);
-      })
-      .finally(() => setInitializing(false));
+    const MAIN = (import.meta.env.VITE_MAIN_APP_URL || '').replace(/\/$/, '');
+
+    // Pick up an access token handed off by the dashboard in the URL fragment
+    // (#sso=...). The fragment is never sent to servers, so the token isn't logged.
+    let hadSsoToken = false;
+    try {
+      const m = (window.location.hash || '').match(/[#&]sso=([^&]+)/);
+      if (m) {
+        setAccessToken(decodeURIComponent(m[1]));
+        hadSsoToken = true;
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    (async () => {
+      try {
+        // Validate whatever token we now hold (handoff token or a prior one).
+        const res = await authApi.fetchCurrentUser();
+        applyAuthResponse(res);
+        startRefreshInterval();
+        setInitializing(false);
+        return;
+      } catch {
+        /* no valid session yet */
+      }
+
+      // No session. If a dashboard is configured and we didn't *just* try a handoff,
+      // bounce to its SSO endpoint. A full-page redirect guarantees the browser sends
+      // the dashboard's login cookie (a background fetch does not, reliably).
+      if (MAIN && !hadSsoToken) {
+        window.location.href = `${MAIN}/api/auth/sso?redirect_uri=${encodeURIComponent(`${window.location.origin}/`)}`;
+        return; // navigating away
+      }
+
+      // Standalone, or we came back from the handoff without a usable token → show login.
+      clearAccessToken();
+      setUser(null);
+      setInitializing(false);
+    })();
 
     return () => stopRefreshInterval();
   }, [applyAuthResponse, startRefreshInterval, stopRefreshInterval]);

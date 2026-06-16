@@ -2,6 +2,8 @@ import { getDeviceId } from './deviceId';
 import { getAccessToken } from './tokenStore';
 
 const API_BASE = import.meta.env.VITE_APP_API_BASE || '/api';
+// Dashboard origin for cross-app SSO (empty = standalone / dev login only).
+const MAIN_APP_URL = (import.meta.env.VITE_MAIN_APP_URL || '').replace(/\/$/, '');
 
 async function request(path, options = {}) {
   const token = getAccessToken();
@@ -41,7 +43,23 @@ export function login(payload) {
   return request('/auth/login', { method: 'POST', body: payload });
 }
 
-export function refreshSession() {
+export async function refreshSession() {
+  // SSO: when a dashboard origin is configured, get the access token from the
+  // dashboard. tasks.anchorcorps.com and dashboard.anchorcorps.com are the same
+  // site, so the browser sends the dashboard's login cookie on this request — no
+  // second login needed. Falls back to the local endpoint when standalone.
+  if (MAIN_APP_URL) {
+    const res = await fetch(`${MAIN_APP_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.message || 'SSO refresh failed');
+    }
+    return res.json();
+  }
   return request('/auth/refresh', { method: 'POST' });
 }
 

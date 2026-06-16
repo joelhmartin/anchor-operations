@@ -1,0 +1,12 @@
+.git
+node_modules
+dist
+uploads
+*.log
+.env
+.env.*
+!.env.public
+!.env.example
+.DS_Store
+Anchor-Client-Dashboard
+anchor-three-app-integration-plan.md

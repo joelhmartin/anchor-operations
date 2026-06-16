@@ -100,6 +100,15 @@ app.use('/api/auth', authRouter);
 app.use('/api/ops', opsRouter); // Operations command center (rebuild)
 app.use('/api/operations', operationsRouter); // Legacy Kinsta site/SSH/bulk endpoints
 
+// Avatars live in the shared users table as `/api/hub/users/:id/avatar` paths and
+// are served by the dashboard's public avatar route. Redirect those requests there.
+app.get('/api/hub/users/:id/avatar', (req, res) => {
+  const main = (process.env.MAIN_APP_URL || '').replace(/\/$/, '');
+  if (!main) return res.status(404).end();
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  return res.redirect(302, `${main}/api/hub/users/${encodeURIComponent(req.params.id)}/avatar${qs}`);
+});
+
 // Serve the built SPA (production) with a catch-all for client-side routing.
 app.use(express.static(CLIENT_BUILD_DIR));
 app.get(/^(?!\/api\/).*/, (req, res, next) => {
