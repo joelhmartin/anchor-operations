@@ -302,10 +302,21 @@ async function persistSkillSuggestions(skillId, runId, suggestions) {
  * updates the run to completed/failed.
  */
 async function executeSkillRun(run) {
-  await query(
-    `UPDATE ops_runs SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1`,
+  // Atomic compare-and-set: only the delivery that wins the transition from
+  // 'queued' → 'running' proceeds. Pub/Sub is at-least-once and the prod
+  // fallback can also re-enter the in-memory worker, so without this guard a
+  // redelivery would re-run every check and double-write findings + cost.
+  const claim = await query(
+    `UPDATE ops_runs
+        SET status = 'running', started_at = COALESCE(started_at, now())
+      WHERE id = $1 AND status = 'queued'
+      RETURNING id`,
     [run.id]
   );
+  if (claim.rowCount === 0) {
+    console.warn(`[ops/executor] skill run ${run.id} not claimed (already running or terminal); skipping`);
+    return;
+  }
 
   const startedAt = new Date();
 
@@ -377,22 +388,32 @@ export async function executeRun(runId, options = {}) {
 
   const run = await loadRunWithDefinition(runId);
   if (!run) throw new Error(`executeRun: run ${runId} not found`);
-  if (run.status !== 'queued') {
-    console.warn(`[ops/executor] run ${runId} not queued (status=${run.status}); skipping`);
-    return run;
-  }
 
   // Dispatch to skill-based path when this run is backed by a skill.
+  // executeSkillRun performs its own atomic queued→running claim, so a
+  // redelivered message safely no-ops if another worker already claimed it.
   if (run.skill_id) {
     await executeSkillRun(run);
     return loadRunWithDefinition(runId);
   }
 
+  // Atomic compare-and-set: only the delivery that wins the transition from
+  // 'queued' → 'running' proceeds. Pub/Sub is at-least-once and the prod
+  // fallback can also re-enter the in-memory worker, so without this guard a
+  // redelivery would re-run every check and double-write check_results +
+  // findings + cost.
   const startedAt = new Date();
-  await query(
-    `UPDATE ops_runs SET status = 'running', started_at = $2 WHERE id = $1`,
+  const claim = await query(
+    `UPDATE ops_runs
+        SET status = 'running', started_at = $2
+      WHERE id = $1 AND status = 'queued'
+      RETURNING id`,
     [runId, startedAt]
   );
+  if (claim.rowCount === 0) {
+    console.warn(`[ops/executor] run ${runId} not claimed (already running or terminal); skipping`);
+    return loadRunWithDefinition(runId);
+  }
 
   const checkSet = Array.isArray(run.definition_check_set) ? run.definition_check_set : [];
   const umbrellas = Array.isArray(run.definition_umbrellas) ? run.definition_umbrellas : [];
