@@ -412,7 +412,7 @@ export async function executeRun(runId, options = {}) {
   );
   if (claim.rowCount === 0) {
     console.warn(`[ops/executor] run ${runId} not claimed (already running or terminal); skipping`);
-    return run;
+    return loadRunWithDefinition(runId);
   }
 
   const checkSet = Array.isArray(run.definition_check_set) ? run.definition_check_set : [];
