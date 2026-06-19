@@ -26,10 +26,23 @@ let inFlight = 0;
 let draining = false;
 let subscription = null;
 let cancelSubscription = null;
-// runId → AbortController for in-flight runs on this instance. The cancel
+// runId → AbortController for in-flight runs on THIS instance only. The cancel
 // subscriber aborts the matching controller; the executor's per-check loop
 // observes `signal.aborted` and stops cleanly, and its terminal UPDATE
 // preserves the 'cancelled' status set by the cancel route.
+//
+// Multi-instance caveat: `OPS_RUN_CANCEL_SUBSCRIPTION` is a SHARED Pub/Sub
+// subscription, so cancel messages are load-balanced (delivered to exactly
+// one consumer), NOT broadcast. If the cancel lands on a worker that does
+// not own this runId, the abort never reaches the owning worker — the DB
+// row is still 'cancelled' (the cancel route writes synchronously, and the
+// CASE-guarded terminal UPDATE in runExecutor preserves it) but the owning
+// run accrues additional cost until its check loop or runSkill completes
+// naturally. Making cancel reliable across instances requires a broadcast
+// pattern (each worker creates its own ephemeral subscription on the
+// `ops.run.cancel` topic at startup, deleted on shutdown); that's deferred
+// to a follow-up because it changes the IAM contract (subscriptions.create)
+// and the env-var surface.
 const inflightControllers = new Map();
 
 async function loadDeps() {
@@ -99,8 +112,18 @@ function handleCancelMessage(message) {
   }
   const controller = inflightControllers.get(runId);
   if (!controller) {
-    // Run isn't in flight on this instance (held by another worker, already
-    // finished, or never started here). Nothing to do.
+    // Run isn't in flight on this instance. Three cases:
+    //   1. Already finished here (cancel arrived after the run completed).
+    //   2. Never started here (cancel was published before our subscriber
+    //      attached, or runId belongs to a different worker generation).
+    //   3. Owned by ANOTHER worker instance. Because the cancel subscription
+    //      is shared, Pub/Sub routed this cancel to us instead of the owner,
+    //      and the message is now consumed — the owner will never see it.
+    //      See the `inflightControllers` block comment above for the
+    //      broadcast-subscription follow-up that addresses case 3.
+    // In all three cases the DB row already reflects 'cancelled' (the cancel
+    // route writes that synchronously before publishing the signal), so the
+    // user-visible status is correct even when case 3 hits.
     return;
   }
   console.warn(`[ops/runner] cancelling in-flight run ${runId}`);
