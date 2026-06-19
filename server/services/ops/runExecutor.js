@@ -334,11 +334,15 @@ async function executeSkillRun(run) {
     const finishedAt = new Date();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
 
+    // Preserve a mid-flight cancel: POST /runs/:id/cancel sets status to
+    // 'cancelled' WHERE status IN ('queued','running'); without the CASE
+    // guard the terminal UPDATE here would clobber it back to 'completed'.
+    // finished_at uses COALESCE so the cancel's timestamp wins when present.
     await query(
       `UPDATE ops_runs
-          SET status = 'completed',
-              finished_at = $2,
-              duration_ms = $3,
+          SET status = CASE WHEN status = 'cancelled' THEN status ELSE 'completed' END,
+              finished_at = COALESCE(finished_at, $2),
+              duration_ms = COALESCE(duration_ms, $3),
               cost_estimate_cents = $4,
               skill_version_number = $5
         WHERE id = $1`,
@@ -351,11 +355,12 @@ async function executeSkillRun(run) {
     const finishedAt = new Date();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
 
+    // Same cancel-preserving guard as the success path.
     await query(
       `UPDATE ops_runs
-          SET status = 'failed',
-              finished_at = $2,
-              duration_ms = $3
+          SET status = CASE WHEN status = 'cancelled' THEN status ELSE 'failed' END,
+              finished_at = COALESCE(finished_at, $2),
+              duration_ms = COALESCE(duration_ms, $3)
         WHERE id = $1`,
       [run.id, finishedAt, durationMs]
     );
@@ -558,12 +563,16 @@ export async function executeRun(runId, options = {}) {
   else if (checkSet.length === 0) finalStatus = 'completed';
   else finalStatus = 'completed';
 
+  // Preserve a mid-flight cancel: POST /runs/:id/cancel sets status to
+  // 'cancelled' WHERE status IN ('queued','running'); without the CASE guard
+  // the terminal UPDATE would clobber it back to 'completed'/'partial'/etc.
+  // finished_at uses COALESCE so the cancel's timestamp wins when present.
   await query(
     `
     UPDATE ops_runs
-       SET status = $2,
-           finished_at = $3,
-           duration_ms = $4,
+       SET status = CASE WHEN status = 'cancelled' THEN status ELSE $2 END,
+           finished_at = COALESCE(finished_at, $3),
+           duration_ms = COALESCE(duration_ms, $4),
            token_usage_json = $5,
            cost_estimate_cents = $6
      WHERE id = $1
