@@ -520,14 +520,20 @@ export async function executeRun(runId, options = {}) {
     // Run-level cost: contribute fractional dollars (not ceiled cents) so the
     // run total is ceiled once at the end of the iteration. Precedence mirrors
     // outcome.cost_cents above: handler-provided cost_cents > tracker accruals
-    // > definition estimate.
+    // > the value persisted to ops_check_results.cost_cents. Reading back
+    // outcome.cost_cents in the final branch keeps the run total consistent
+    // with what was stored per check: skipped/no-work paths leave
+    // outcome.cost_cents at 0 (checkTracker.totalCents() short-circuits the
+    // ?? chain), while the failure branch encodes the def.costEstimate
+    // fallback via ||. Charging def.costEstimate unconditionally would inflate
+    // the run total for skipped checks even though their persisted cost is 0.
     let checkDollars;
     if (rawCostCents != null) {
       checkDollars = rawCostCents / 100;
     } else if (checkSummary.total_dollars > 0) {
       checkDollars = checkSummary.total_dollars;
     } else {
-      checkDollars = (Number(def.costEstimate) || 0) / 100;
+      checkDollars = (Number(outcome.cost_cents) || 0) / 100;
     }
     totalCostDollars += checkDollars;
     totalCostCents = Math.ceil(totalCostDollars * 100);
