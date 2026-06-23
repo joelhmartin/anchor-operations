@@ -45,11 +45,12 @@ async function loadGscConnection(clientUserId) {
   return rows[0] || null;
 }
 
-async function fetchGscJson(endpoint, accessToken) {
+async function fetchGscJson(endpoint, accessToken, signal) {
   const res = await safeHttpFetch(endpoint, {
     timeoutMs: 30_000,
     maxBytes: 2_000_000,
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal
   });
   if (res.status >= 400) {
     return { error: `GSC ${res.status}`, raw: (res.body || '').slice(0, 500) };
@@ -89,7 +90,7 @@ registerCheck('web.gsc.coverage_errors', {
     if (c.kind !== 'ok') return { status: 'skipped', payload: { reason: c.reason } };
     const siteParam = encodeURIComponent(c.siteCandidates[0]);
     const endpoint = `${SEARCH_CONSOLE_API}/sites/${siteParam}/searchanalytics/query`;
-    const probe = await fetchGscJson(endpoint, c.accessToken).catch((err) => ({ error: err.message }));
+    const probe = await fetchGscJson(endpoint, c.accessToken, ctx.signal).catch((err) => ({ error: err.message }));
     if (probe.error) {
       return {
         status: 'error',
@@ -168,7 +169,8 @@ registerCheck('web.gsc.indexed_pages_drop', {
     void endpoint;
     const sitemaps = await fetchGscJson(
       `${SEARCH_CONSOLE_API}/sites/${siteParam}/sitemaps`,
-      c.accessToken
+      c.accessToken,
+      ctx.signal
     ).catch((err) => ({ error: err.message }));
     if (sitemaps.error) {
       return {

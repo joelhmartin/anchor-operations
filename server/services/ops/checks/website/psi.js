@@ -77,7 +77,7 @@ function extractMetrics(psiResponse) {
   };
 }
 
-async function runPsi(websiteUrl, strategy, apiKey) {
+async function runPsi(websiteUrl, strategy, apiKey, signal) {
   const url = new URL(PSI_ENDPOINT);
   url.searchParams.set('url', websiteUrl);
   url.searchParams.set('strategy', strategy);
@@ -94,7 +94,8 @@ async function runPsi(websiteUrl, strategy, apiKey) {
 
   const res = await safeHttpFetch(url.toString(), {
     timeoutMs: 60_000,
-    maxBytes: 2_000_000
+    maxBytes: 2_000_000,
+    signal
   });
   if (res.status >= 400) {
     return {
@@ -135,8 +136,8 @@ registerCheck('web.psi', {
     }
 
     const [mobile, desktop] = await Promise.all([
-      runPsi(websiteUrl, 'mobile', apiKey).catch((err) => ({ error: err.message })),
-      runPsi(websiteUrl, 'desktop', apiKey).catch((err) => ({ error: err.message }))
+      runPsi(websiteUrl, 'mobile', apiKey, ctx.signal).catch((err) => ({ error: err.message })),
+      runPsi(websiteUrl, 'desktop', apiKey, ctx.signal).catch((err) => ({ error: err.message }))
     ]);
 
     if (costTracker?.add) {

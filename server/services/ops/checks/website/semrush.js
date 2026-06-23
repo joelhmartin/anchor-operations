@@ -58,11 +58,11 @@ async function getSemrushContext(ctx) {
   return ctx._semrushCtx;
 }
 
-async function callSemrush(params, apiKey) {
+async function callSemrush(params, apiKey, signal) {
   const url = new URL(SEMRUSH_BASE);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set('key', apiKey);
-  const res = await safeHttpFetch(url.toString(), { timeoutMs: 30_000, maxBytes: 1_500_000 });
+  const res = await safeHttpFetch(url.toString(), { timeoutMs: 30_000, maxBytes: 1_500_000, signal });
   if (res.status >= 400) {
     return { error: `SEMrush ${res.status}`, raw: (res.body || '').slice(0, 500) };
   }
@@ -85,7 +85,8 @@ registerCheck('web.semrush.organic_traffic_drop', {
         display_limit: '1',
         export_columns: 'Dn,Or,Ot,Oc'
       },
-      c.apiKey
+      c.apiKey,
+      ctx.signal
     ).catch((err) => ({ error: err.message }));
     if (result.error) {
       return {
@@ -128,7 +129,8 @@ registerCheck('web.semrush.top_keywords_lost', {
         display_limit: '50',
         export_columns: 'Ph,Po,Pp,Nq'
       },
-      c.apiKey
+      c.apiKey,
+      ctx.signal
     ).catch((err) => ({ error: err.message }));
     if (result.error) {
       return {
@@ -169,7 +171,8 @@ registerCheck('web.semrush.toxic_backlinks', {
         target_type: 'root_domain',
         export_columns: 'total,domains_num,toxic_score'
       },
-      c.apiKey
+      c.apiKey,
+      ctx.signal
     ).catch((err) => ({ error: err.message }));
     if (result.error) {
       return {

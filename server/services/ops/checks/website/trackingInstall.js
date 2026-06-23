@@ -24,7 +24,7 @@ registerCheck('web.tracking_install', {
 
     let res;
     try {
-      res = await safeHttpFetch(websiteUrl, { timeoutMs: 12_000, maxBytes: 750_000 });
+      res = await safeHttpFetch(websiteUrl, { timeoutMs: 12_000, maxBytes: 750_000, signal: ctx.signal });
     } catch (err) {
       return {
         status: 'error',
