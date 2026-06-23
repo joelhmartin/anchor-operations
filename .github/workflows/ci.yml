@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
+      - name: Install dependencies
+        run: yarn install --immutable
+      - name: Build
+        run: yarn build
+
+  lint:
+    name: lint (informational)
+    runs-on: ubuntu-latest
+    # Non-blocking: this repo carries pre-existing lint warnings/errors in unrelated
+    # files, and lint scopes to src/ only (server changes aren't covered). The polish
+    # routines enforce "no new lint errors in touched files" themselves; this job
+    # surfaces lint output without gating the merge. `build` is the authoritative gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
+      - name: Install dependencies
+        run: yarn install --immutable
+      - name: Lint
+        run: yarn lint
