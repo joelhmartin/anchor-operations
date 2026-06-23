@@ -428,6 +428,14 @@ export async function executeRun(runId, options = {}) {
 
   const tokenUsage = { prompt_tokens: 0, completion_tokens: 0, cost_cents: 0, by_check: {} };
   const runCostTracker = createCostTracker();
+  // Accumulate run cost in fractional dollars and Math.ceil ONCE when deriving
+  // cents. Summing per-check ceiled cents inflates the total: N sub-cent checks
+  // each round up to 1¢ individually, which over-reports cost_estimate_cents
+  // (used by budget math + monthly spend rollups) and trips the tier-budget
+  // guard prematurely with a spurious ops.budget_exceeded finding. Per-check
+  // outcome.cost_cents stays ceiled — that's the display value persisted to
+  // ops_check_results.cost_cents and surfaced in tokenUsage.by_check.
+  let totalCostDollars = 0;
   let totalCostCents = 0;
   let hadError = false;
   let stopped = false;
@@ -468,12 +476,17 @@ export async function executeRun(runId, options = {}) {
     const startedTs = Date.now();
     const checkTracker = createCostTracker();
     let outcome;
+    // Captured separately from outcome.cost_cents (which is ceiled per-check
+    // for display). When the handler returns a cost_cents value directly, it
+    // is authoritative for the run-level dollar accumulator below.
+    let rawCostCents = null;
     try {
       const raw = await withTimeout(
         Promise.resolve().then(() => def.handler(ctx, checkTracker)),
         ctx.config.timeoutMs || DEFAULT_CHECK_TIMEOUT_MS,
         entry.check_id
       );
+      if (raw?.cost_cents != null) rawCostCents = Number(raw.cost_cents) || 0;
       outcome = {
         status: raw?.status || 'pass',
         severity: raw?.severity || null,
@@ -504,8 +517,28 @@ export async function executeRun(runId, options = {}) {
       });
     }
 
+    // Run-level cost: contribute fractional dollars (not ceiled cents) so the
+    // run total is ceiled once at the end of the iteration. Precedence mirrors
+    // outcome.cost_cents above: handler-provided cost_cents > tracker accruals
+    // > the value persisted to ops_check_results.cost_cents. Reading back
+    // outcome.cost_cents in the final branch keeps the run total consistent
+    // with what was stored per check: skipped/no-work paths leave
+    // outcome.cost_cents at 0 (checkTracker.totalCents() short-circuits the
+    // ?? chain), while the failure branch encodes the def.costEstimate
+    // fallback via ||. Charging def.costEstimate unconditionally would inflate
+    // the run total for skipped checks even though their persisted cost is 0.
+    let checkDollars;
+    if (rawCostCents != null) {
+      checkDollars = rawCostCents / 100;
+    } else if (checkSummary.total_dollars > 0) {
+      checkDollars = checkSummary.total_dollars;
+    } else {
+      checkDollars = (Number(outcome.cost_cents) || 0) / 100;
+    }
+    totalCostDollars += checkDollars;
+    totalCostCents = Math.ceil(totalCostDollars * 100);
+
     const cost = outcome.cost_cents || 0;
-    totalCostCents += cost;
     tokenUsage.cost_cents = totalCostCents;
     tokenUsage.prompt_tokens = runCostTracker.summary().prompt_tokens;
     tokenUsage.completion_tokens = runCostTracker.summary().completion_tokens;
