@@ -1,419 +1,196 @@
-/**
- * ClientChat — Phase 7 Operations AI chat UI.
- *
- * One conversation per (admin, picked client). Messages are echoed inline:
- *   - user prompts as plain text
- *   - assistant replies as plain text
- *   - tool calls as compact cards with state (proposed → running → done/error/rejected)
- *
- * Mutating proposals from the supervisor open the shared ApprovalDialog. The
- * approval id round-trips through the backend so the eventual execution is
- * audited via ops_tool_approvals.
- */
-
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Autocomplete, Box, Button, Chip, Divider, MenuItem, Paper, Select, Stack, TextField, Tooltip, Typography } from '@mui/material';
+// src/views/admin/Operations/Chat/ClientChat.jsx
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Stack, Box, Paper, Autocomplete, TextField, Select, MenuItem, Typography, Chip, Button } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import HistoryIcon from '@mui/icons-material/History';
-import LoadingButton from 'ui-component/extended/LoadingButton';
-import EmptyState from 'ui-component/extended/EmptyState';
+import StopIcon from '@mui/icons-material/Stop';
 import { useToast } from 'contexts/ToastContext';
+import { listOpsClients, listOpsChatThreads, getOpsChatThread, approveOpsChatAction, rejectOpsChatAction } from 'api/ops';
+import { streamOpsChat } from 'api/opsChatStream';
 import { clientLabel } from '../_clientLabel';
-import { sendOpsChat, approveOpsChatAction, rejectOpsChatAction, listOpsRuns, listOpsClients } from 'api/ops';
+import Markdown from 'ui-component/extended/Markdown';
+import ThreadSidebar from './ThreadSidebar';
 import ApprovalDialog from './ApprovalDialog';
 
-const PLATFORM_OPTIONS = [
-  { value: 'all', label: 'All platforms' },
-  { value: 'website', label: 'Website' },
-  { value: 'google_ads', label: 'Google Ads' },
-  { value: 'meta', label: 'Meta' },
-  { value: 'ctm', label: 'CTM' }
+const MODELS = [
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6 (balanced)' },
+  { id: 'claude-haiku-4-5', label: 'Haiku 4.5 (fast)' },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8 (deep)' }
 ];
 
-const PLATFORM_PREFIXES = {
-  website: '[Focus: Website] ',
-  google_ads: '[Focus: Google Ads] ',
-  meta: '[Focus: Meta] ',
-  ctm: '[Focus: CTM] '
-};
-
-function MessageBubble({ role, text }) {
-  if (!text) return null;
-  const palette = {
-    user: { bg: 'primary.lighter', align: 'flex-end' },
-    model: { bg: 'grey.100', align: 'flex-start' },
-    tool: { bg: 'grey.50', align: 'flex-start' }
-  }[role] || { bg: 'grey.50', align: 'flex-start' };
-
-  return (
-    <Box sx={{ display: 'flex', justifyContent: palette.align, mb: 1 }}>
-      <Paper
-        elevation={0}
-        sx={{
-          maxWidth: '85%',
-          px: 1.5,
-          py: 1,
-          bgcolor: palette.bg,
-          border: '1px solid',
-          borderColor: 'divider',
-          whiteSpace: 'pre-wrap',
-          fontSize: 14
-        }}
-      >
-        {text}
-      </Paper>
-    </Box>
-  );
-}
-
-function ToolCallCard({ name, state, summary }) {
-  const colorMap = {
-    proposed: 'warning',
-    running: 'info',
-    done: 'success',
-    error: 'error',
-    rejected: 'default'
-  };
-  return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
-      <Paper
-        elevation={0}
-        sx={{
-          maxWidth: '85%',
-          px: 1.5,
-          py: 1,
-          bgcolor: 'grey.50',
-          border: '1px dashed',
-          borderColor: 'divider'
-        }}
-      >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-            {name}
-          </Typography>
-          <Chip size="small" label={state} color={colorMap[state] || 'default'} />
-        </Stack>
-        {summary && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-            {summary}
-          </Typography>
-        )}
-      </Paper>
-    </Box>
-  );
-}
-
-// Flatten Vertex Content[] into renderable rows.
-function renderableFromMessages(messages) {
+// Flatten persisted Anthropic content blocks into render rows.
+function rowsFromMessages(messages) {
   const rows = [];
-  for (const msg of messages || []) {
-    if (msg.role === 'user') {
-      const text = (msg.parts || [])
-        .map((p) => p.text || '')
-        .join('')
-        .trim();
-      if (text) rows.push({ kind: 'msg', role: 'user', text });
-    } else if (msg.role === 'model') {
-      const text = (msg.parts || [])
-        .map((p) => p.text || '')
-        .join('')
-        .trim();
-      if (text) rows.push({ kind: 'msg', role: 'model', text });
-      const fnCalls = (msg.parts || []).filter((p) => p.functionCall);
-      for (const fn of fnCalls) {
-        rows.push({ kind: 'tool', name: fn.functionCall.name, state: 'running' });
-      }
-    } else if (msg.role === 'tool') {
-      const responses = (msg.parts || []).filter((p) => p.functionResponse);
-      for (const r of responses) {
-        const resp = r.functionResponse?.response || {};
-        const isErr = !!resp.error;
-        rows.push({
-          kind: 'tool',
-          name: r.functionResponse.name,
-          state: isErr ? 'error' : 'done',
-          summary: isErr ? String(resp.error).slice(0, 200) : null
-        });
+  for (const m of messages) {
+    const blocks = Array.isArray(m.content) ? m.content : [{ type: 'text', text: String(m.content || '') }];
+    for (const b of blocks) {
+      if (b.type === 'text') rows.push({ kind: 'text', role: m.role, text: b.text });
+      else if (b.type === 'thinking') rows.push({ kind: 'thinking', text: b.thinking || '' });
+      else if (b.type === 'tool_use') rows.push({ kind: 'tool_use', id: b.id, name: b.name, input: b.input, state: 'running', result: null });
+      else if (b.type === 'tool_result') {
+        const target = [...rows].reverse().find((r) => r.kind === 'tool_use' && r.id === b.tool_use_id);
+        if (target) {
+          let parsed = b.content;
+          try { parsed = typeof b.content === 'string' ? JSON.parse(b.content) : b.content; } catch { parsed = b.content; }
+          target.result = parsed;
+          target.state = 'done';
+        }
       }
     }
   }
-  // Collapse consecutive identical tool rows so a successful call only shows
-  // once even though the call+response pair appears in two messages.
-  const collapsed = [];
-  for (const row of rows) {
-    const last = collapsed[collapsed.length - 1];
-    if (
-      last &&
-      last.kind === 'tool' &&
-      row.kind === 'tool' &&
-      last.name === row.name &&
-      last.state === 'running' &&
-      (row.state === 'done' || row.state === 'error')
-    ) {
-      collapsed[collapsed.length - 1] = { ...last, state: row.state, summary: row.summary };
-    } else {
-      collapsed.push(row);
-    }
-  }
-  return collapsed;
+  return rows;
 }
 
-export default function ClientChat({ initialClientUserId } = {}) {
-  const { showToast } = useToast();
+export default function ClientChat({ initialClientUserId }) {
+  const toast = useToast();
   const [clients, setClients] = useState([]);
   const [client, setClient] = useState(null);
-  const [platform, setPlatform] = useState('all');
-  const [history, setHistory] = useState([]);
+  const [threads, setThreads] = useState([]);
+  const [threadId, setThreadId] = useState(null);
+  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [rows, setRows] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [streamText, setStreamText] = useState('');
+  const [streamThinking, setStreamThinking] = useState('');
+  const [streamTools, setStreamTools] = useState([]);
   const [pendingApproval, setPendingApproval] = useState(null);
-  const [latestRuns, setLatestRuns] = useState([]);
-  const [costSummary, setCostSummary] = useState(null);
+  const [cost, setCost] = useState(null);
+  const abortRef = useRef(null);
+  const scrollRef = useRef(null);
 
+  useEffect(() => { listOpsClients().then(setClients).catch(() => {}); }, []);
   useEffect(() => {
-    listOpsClients()
-      .then((rows) => {
-        const mapped = rows.map((c) => ({ id: c.id || c.user_id, name: clientLabel(c) })).filter((x) => x.id);
-        setClients(mapped);
-        if (initialClientUserId) {
-          const match = mapped.find((c) => c.id === initialClientUserId);
-          if (match) setClient(match);
-        }
-      })
-      .catch(() => setClients([]));
-  }, [initialClientUserId]);
-
-  useEffect(() => {
-    if (!client) {
-      setLatestRuns([]);
-      return;
-    }
-    listOpsRuns({ client_user_id: client.id, limit: 5 })
-      .then(setLatestRuns)
-      .catch(() => setLatestRuns([]));
-    // Reset per-client state
-    setHistory([]);
-    setPendingApproval(null);
-    setCostSummary(null);
+    if (initialClientUserId && clients.length) setClient(clients.find((c) => c.id === initialClientUserId) || null);
+  }, [initialClientUserId, clients]);
+  const refreshThreads = useCallback(() => {
+    listOpsChatThreads(client?.id).then(setThreads).catch(() => {});
   }, [client]);
+  useEffect(() => { refreshThreads(); }, [refreshThreads]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [rows, streamText, streamThinking, streamTools]);
 
-  const renderable = useMemo(() => renderableFromMessages(history), [history]);
+  const openThread = useCallback(async (id) => {
+    setThreadId(id);
+    setStreamText(''); setStreamThinking(''); setStreamTools([]);
+    if (!id) { setRows([]); return; }
+    try {
+      const data = await getOpsChatThread(id);
+      setRows(rowsFromMessages((data.messages || []).map((r) => ({ role: r.role, content: r.content_json }))));
+      if (data.thread?.model_id) setModel(data.thread.model_id);
+    } catch { toast.error('Could not load conversation'); }
+  }, [toast]);
 
-  const send = useCallback(
-    async (overridePrompt) => {
-      const raw = (overridePrompt ?? prompt).trim();
-      if (!raw) return;
-      if (!client) {
-        showToast('Pick a client first', 'warning');
-        return;
-      }
-      // Prepend platform focus hint when a specific platform is selected.
-      const prefix = platform !== 'all' ? PLATFORM_PREFIXES[platform] || '' : '';
-      const toSend = prefix + raw;
-      setBusy(true);
-      try {
-        const result = await sendOpsChat({
-          clientUserId: client.id,
-          prompt: toSend,
-          history
-        });
-        setHistory(result.messages || []);
-        setCostSummary(result.costSummary || null);
-        if (result.pendingApproval) {
-          setPendingApproval(result.pendingApproval);
+  const newChat = useCallback(() => { setThreadId(null); setRows([]); setStreamText(''); setStreamThinking(''); setStreamTools([]); }, []);
+
+  const send = useCallback(async () => {
+    const text = prompt.trim();
+    if (!text) return;
+    if (!client) { toast.warning('Pick a client first'); return; }
+    setBusy(true);
+    setRows((r) => [...r, { kind: 'text', role: 'user', text }]);
+    setPrompt(''); setStreamText(''); setStreamThinking(''); setStreamTools([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const done = await streamOpsChat({
+        clientUserId: client.id, threadId, prompt: text, modelId: model, signal: controller.signal,
+        onEvent: (evt) => {
+          if (evt.type === 'text') setStreamText((s) => s + (evt.delta || ''));
+          else if (evt.type === 'thinking') setStreamThinking((s) => s + (evt.delta || ''));
+          else if (evt.type === 'tool_use') setStreamTools((t) => [...t, { name: evt.name, input: evt.input, state: 'running' }]);
+          else if (evt.type === 'tool_result') setStreamTools((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, state: 'done', result: evt.result } : x)));
+          else if (evt.type === 'cost') setCost(evt.summary);
         }
-        if (result.status === 'budget_exhausted') {
-          showToast('Per-turn budget exhausted — split the question', 'warning');
-        }
-        if (overridePrompt === undefined) setPrompt('');
-      } catch (err) {
-        showToast(`Chat failed: ${err.response?.data?.message || err.message}`, 'error');
-      } finally {
-        setBusy(false);
-      }
-    },
-    [prompt, client, platform, history, showToast]
-  );
-
-  const handleApprove = useCallback(
-    async (approvalId) => {
-      try {
-        const result = await approveOpsChatAction(approvalId);
-        if (result.error) {
-          showToast(`Approval failed: ${result.error}`, 'error');
-        } else {
-          showToast('Action approved and executed', 'success');
-        }
-        setPendingApproval(null);
-        // Surface the result back into the conversation as a synthetic tool note.
-        setHistory((h) => [
-          ...h,
-          {
-            role: 'tool',
-            parts: [
-              {
-                functionResponse: {
-                  name: 'approval_result',
-                  response: result.result || { ok: result.ok }
-                }
-              }
-            ]
-          }
-        ]);
-      } catch (err) {
-        showToast(`Approval failed: ${err.response?.data?.message || err.message}`, 'error');
-      }
-    },
-    [showToast]
-  );
-
-  const handleReject = useCallback(
-    async (approvalId) => {
-      try {
-        await rejectOpsChatAction(approvalId, 'rejected by admin from chat');
-        showToast('Proposal rejected', 'info');
-        setPendingApproval(null);
-        setHistory((h) => [
-          ...h,
-          {
-            role: 'tool',
-            parts: [
-              {
-                functionResponse: {
-                  name: 'approval_result',
-                  response: { rejected: true }
-                }
-              }
-            ]
-          }
-        ]);
-      } catch (err) {
-        showToast(`Reject failed: ${err.response?.data?.message || err.message}`, 'error');
-      }
-    },
-    [showToast]
-  );
-
-  const handleReferenceLatestRun = useCallback(() => {
-    if (!latestRuns.length) {
-      showToast('No recent runs for this client', 'info');
-      return;
+      });
+      // Reconcile: reload the thread so persisted blocks render canonically.
+      if (done?.threadId) { setThreadId(done.threadId); await openThread(done.threadId); refreshThreads(); }
+      if (done?.pendingApproval) setPendingApproval(done.pendingApproval);
+      if (done?.costSummary) setCost(done.costSummary);
+      if (done?.status === 'budget_exhausted') toast.warning('Per-turn budget hit — split the question');
+    } catch (e) {
+      if (e.name === 'AbortError') toast.info('Stopped');
+      else toast.error(e.message || 'Chat failed');
+    } finally {
+      setBusy(false); abortRef.current = null;
+      setStreamText(''); setStreamThinking(''); setStreamTools([]);
     }
-    const run = latestRuns[0];
-    const inject = `Reference latest run: ${run.id} (tier=${run.tier} status=${run.status}). Use load_run to pull its check_results before answering.`;
-    setPrompt((p) => (p ? `${p}\n\n${inject}` : inject));
-  }, [latestRuns, showToast]);
+  }, [prompt, client, threadId, model, toast, openThread, refreshThreads]);
+
+  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
+
+  const handleApprove = useCallback(async (id) => {
+    try { await approveOpsChatAction(id); setPendingApproval(null); if (threadId) await openThread(threadId); }
+    catch { toast.error('Approval failed'); }
+  }, [threadId, openThread, toast]);
+  const handleReject = useCallback(async (id) => {
+    try { await rejectOpsChatAction(id); setPendingApproval(null); if (threadId) await openThread(threadId); }
+    catch { toast.error('Reject failed'); }
+  }, [threadId, openThread, toast]);
+
+  const allRows = useMemo(() => {
+    const live = [];
+    if (streamThinking) live.push({ kind: 'thinking', text: streamThinking });
+    streamTools.forEach((t) => live.push({ kind: 'tool_use', name: t.name, input: t.input, state: t.state, result: t.result }));
+    if (streamText) live.push({ kind: 'text', role: 'assistant', text: streamText });
+    return [...rows, ...live];
+  }, [rows, streamText, streamThinking, streamTools]);
 
   return (
-    <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
-        <Autocomplete
-          fullWidth
-          options={clients}
-          value={client}
-          onChange={(_, v) => setClient(v)}
-          getOptionLabel={(opt) => (opt ? opt.name || opt.id : '')}
-          isOptionEqualToValue={(o, v) => o.id === v.id}
-          renderInput={(params) => <TextField {...params} label="Pick client" size="small" />}
-          sx={{ minWidth: 280 }}
-        />
-        <Tooltip title="Focus the agent on a specific platform sub-agent">
-          <Select size="small" value={platform} onChange={(e) => setPlatform(e.target.value)} sx={{ minWidth: 160 }}>
-            {PLATFORM_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
+    <Stack direction="row" spacing={2} sx={{ height: '70vh' }}>
+      <ThreadSidebar threads={threads} activeId={threadId} onSelect={openThread} onNew={newChat} />
+      <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Autocomplete sx={{ flex: 1 }} size="small" options={clients} value={client}
+            getOptionLabel={(c) => clientLabel(c)} onChange={(_, v) => { setClient(v); newChat(); }}
+            renderInput={(p) => <TextField {...p} label="Client" />} />
+          <Select size="small" value={model} onChange={(e) => setModel(e.target.value)} sx={{ minWidth: 200 }}>
+            {MODELS.map((m) => <MenuItem key={m.id} value={m.id}>{m.label}</MenuItem>)}
           </Select>
-        </Tooltip>
-        <Button
-          startIcon={<HistoryIcon />}
-          variant="outlined"
-          size="small"
-          onClick={handleReferenceLatestRun}
-          disabled={!client || !latestRuns.length}
-        >
-          Reference latest run
-        </Button>
-        {costSummary && (
-          <Chip
-            size="small"
-            label={`turn cost: ${costSummary.total_cents}¢`}
-            color={costSummary.total_cents >= 50 ? 'warning' : 'default'}
-          />
-        )}
+        </Stack>
+
+        <Box ref={scrollRef} sx={{ flex: 1, overflowY: 'auto', p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+          {allRows.map((row, i) => {
+            if (row.kind === 'text') return (
+              <Paper key={i} sx={{ p: 1.5, mb: 1, maxWidth: '85%', ml: row.role === 'user' ? 'auto' : 0, bgcolor: row.role === 'user' ? 'primary.lighter' : 'background.paper' }}>
+                {row.role === 'user' ? <Typography sx={{ whiteSpace: 'pre-wrap' }}>{row.text}</Typography> : <Markdown>{row.text}</Markdown>}
+              </Paper>
+            );
+            if (row.kind === 'thinking') return (
+              <Box key={i} sx={{ mb: 1 }}>
+                <Chip size="small" label="thinking" sx={{ mb: 0.5 }} />
+                <Typography variant="caption" sx={{ display: 'block', whiteSpace: 'pre-wrap', color: 'text.secondary', pl: 1 }}>{row.text}</Typography>
+              </Box>
+            );
+            if (row.kind === 'tool_use') return (
+              <Paper key={i} variant="outlined" sx={{ p: 1, mb: 1, bgcolor: 'grey.100' }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip size="small" color={row.state === 'done' ? 'success' : 'info'} label={row.name} />
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>{JSON.stringify(row.input)}</Typography>
+                </Stack>
+                {row.result != null && (
+                  <Box component="pre" sx={{ mt: 0.5, m: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>
+                    {typeof row.result === 'string' ? row.result : JSON.stringify(row.result, null, 2)}
+                  </Box>
+                )}
+              </Paper>
+            );
+            return null; // tool_result is shown inline on the tool_use card
+          })}
+        </Box>
+
+        {cost && <Typography variant="caption" sx={{ color: 'text.secondary' }}>This turn: {cost.total_cents}¢ · {cost.total_tokens} tokens</Typography>}
+
+        <Stack direction="row" spacing={1} alignItems="flex-end">
+          <TextField fullWidth multiline minRows={1} maxRows={6} size="small" placeholder="Ask about this client…"
+            value={prompt} onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); } }} />
+          {busy
+            ? <Button color="warning" variant="outlined" startIcon={<StopIcon />} onClick={stop}>Stop</Button>
+            : <Button variant="contained" endIcon={<SendIcon />} disabled={!client || !prompt.trim()} onClick={send}>Send</Button>}
+        </Stack>
       </Stack>
 
-      <Divider />
-
-      <Box
-        sx={{
-          minHeight: 320,
-          maxHeight: 520,
-          overflow: 'auto',
-          bgcolor: 'background.default',
-          p: 1.5,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1
-        }}
-      >
-        {renderable.length === 0 && (
-          <EmptyState
-            title="Ask a question about this client"
-            message="Try: 'Is GTM installed?' or 'Why did Google Ads conversions drop last week?'"
-          />
-        )}
-        {renderable.map((row, idx) =>
-          row.kind === 'msg' ? (
-            <MessageBubble key={idx} role={row.role} text={row.text} />
-          ) : (
-            <ToolCallCard key={idx} name={row.name} state={row.state} summary={row.summary} />
-          )
-        )}
-      </Box>
-
-      <Stack direction="row" spacing={1}>
-        <TextField
-          fullWidth
-          multiline
-          minRows={1}
-          maxRows={6}
-          size="small"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={client ? 'Ask the supervisor…' : 'Pick a client first'}
-          disabled={!client || busy}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
-        <LoadingButton
-          variant="contained"
-          startIcon={<SendIcon />}
-          onClick={() => send()}
-          disabled={!client || !prompt.trim()}
-          loading={busy}
-          loadingLabel="Thinking…"
-        >
-          Send
-        </LoadingButton>
-      </Stack>
-
-      <Typography variant="caption" color="text.secondary">
-        Per-turn budget cap: 50¢. Cmd/Ctrl+Enter to send.
-      </Typography>
-
-      <ApprovalDialog
-        open={Boolean(pendingApproval)}
-        approval={pendingApproval}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onDismiss={() => setPendingApproval(null)}
-      />
+      <ApprovalDialog open={Boolean(pendingApproval)} approval={pendingApproval}
+        onApprove={handleApprove} onReject={handleReject} onDismiss={() => setPendingApproval(null)} />
     </Stack>
   );
 }

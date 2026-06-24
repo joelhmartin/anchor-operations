@@ -376,6 +376,51 @@ export async function runSupervisorTurn({
   };
 }
 
+// --- Exported helpers for the Claude (Anthropic) runtime ---
+
+/**
+ * Return the supervisor tools as an array of { declaration, handler } objects
+ * for consumption by toAnthropicTools / makeSupervisorRunTool.
+ */
+export function getSupervisorTools() {
+  return Object.values(SUPERVISOR_TOOLS);
+}
+
+/**
+ * Build a `runTool(name, args)` function bound to one turn's context +
+ * costTracker. Translates the propose_action return value into the
+ * `{ __awaiting_approval: true }` shape that anthropicRuntime expects.
+ */
+export function makeSupervisorRunTool({
+  clientUserId,
+  userId,
+  costTracker,
+  budgetCents = PER_TURN_BUDGET_CENTS
+}) {
+  const ctx = { clientUserId, userId, budgetCents };
+  return async function runTool(name, args) {
+    const tool = SUPERVISOR_TOOLS[name];
+    if (!tool) return { error: `Unknown tool: ${name}` };
+    const result = await tool.handler({ args, ctx, costTracker });
+    // Translate the approval signal: propose_action returns { approval_id, status:'pending' }
+    // but anthropicRuntime pauses on { __awaiting_approval: true }.
+    if (name === 'propose_action' && result?.approval_id) {
+      return { __awaiting_approval: true, approval_id: result.approval_id, ...result };
+    }
+    return result;
+  };
+}
+
+/**
+ * Build the plain-string system instruction for one session.
+ * The Vertex path wraps this in { role:'system', parts:[{text}] }; the
+ * Anthropic path passes it directly as the `system` parameter.
+ */
+export async function buildSystemInstruction({ clientUserId }) {
+  const ctxData = await loadRecentRunsContext(clientUserId);
+  return `${SUPERVISOR_SYSTEM}\n\n${buildContextPreamble({ clientUserId, runs: ctxData.runs })}`;
+}
+
 /**
  * Execute a previously-approved tool. Called from the chat route's
  * /approve endpoint.
