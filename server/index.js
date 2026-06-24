@@ -88,7 +88,11 @@ const corsOptions = {
 };
 
 // Core middleware before routers so bodies/cookies are available.
-app.use(cors(corsOptions));
+// CORS is scoped to /api only — static assets + the SPA must never be CORS-gated
+// (Vite emits `<script type="module" crossorigin>`, which sends an Origin header
+// even on same-origin asset fetches; a global CORS gate would 500 those on any
+// host not in the allowlist, e.g. the raw *.run.app URL).
+app.use('/api', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
