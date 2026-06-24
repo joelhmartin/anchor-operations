@@ -25,8 +25,16 @@ function rowsFromMessages(messages) {
     for (const b of blocks) {
       if (b.type === 'text') rows.push({ kind: 'text', role: m.role, text: b.text });
       else if (b.type === 'thinking') rows.push({ kind: 'thinking', text: b.thinking || '' });
-      else if (b.type === 'tool_use') rows.push({ kind: 'tool_use', name: b.name, input: b.input });
-      else if (b.type === 'tool_result') rows.push({ kind: 'tool_result', text: typeof b.content === 'string' ? b.content : JSON.stringify(b.content) });
+      else if (b.type === 'tool_use') rows.push({ kind: 'tool_use', id: b.id, name: b.name, input: b.input, state: 'running', result: null });
+      else if (b.type === 'tool_result') {
+        const target = [...rows].reverse().find((r) => r.kind === 'tool_use' && r.id === b.tool_use_id);
+        if (target) {
+          let parsed = b.content;
+          try { parsed = typeof b.content === 'string' ? JSON.parse(b.content) : b.content; } catch { parsed = b.content; }
+          target.result = parsed;
+          target.state = 'done';
+        }
+      }
     }
   }
   return rows;
