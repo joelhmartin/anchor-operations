@@ -4,6 +4,7 @@ import { Stack, Autocomplete, TextField, Paper, Typography, Chip, Button } from 
 import { listOpsClients } from 'api/ops';
 import { listBlogPosts, cancelBlogPost } from 'api/blog';
 import { clientLabel } from '../../_clientLabel';
+import { useToast } from 'contexts/ToastContext';
 import BlogCompose from './BlogCompose';
 
 const STATUS_COLOR = { draft: 'default', scheduled: 'info', publishing: 'warning', published: 'success', failed: 'error', cancelled: 'default' };
@@ -12,9 +13,22 @@ export default function BlogPane() {
   const [clients, setClients] = useState([]);
   const [client, setClient] = useState(null);
   const [posts, setPosts] = useState([]);
+  const toast = useToast();
 
   useEffect(() => { listOpsClients().then(setClients).catch(() => {}); }, []);
-  const refresh = useCallback(() => { listBlogPosts(client?.id).then(setPosts).catch(() => {}); }, [client]);
+  const refresh = useCallback(() => {
+    if (!client?.id) { setPosts([]); return; }
+    listBlogPosts(client.id).then(setPosts).catch(() => {});
+  }, [client]);
+  const onCancel = async (id) => {
+    try {
+      await cancelBlogPost(id);
+      toast.success('Cancelled');
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Cancel failed');
+    }
+  };
   useEffect(() => { refresh(); }, [refresh]);
 
   return (
@@ -29,7 +43,7 @@ export default function BlogPane() {
             <Chip size="small" color={STATUS_COLOR[p.status] || 'default'} label={p.status} />
             <Typography variant="body2" sx={{ flex: 1 }} noWrap>{p.title}</Typography>
             {p.wp_post_url && <a href={p.wp_post_url} target="_blank" rel="noopener noreferrer">view</a>}
-            {['draft', 'scheduled', 'failed'].includes(p.status) && <Button size="small" onClick={() => cancelBlogPost(p.id).then(refresh)}>Cancel</Button>}
+            {['draft', 'scheduled', 'failed'].includes(p.status) && <Button size="small" onClick={() => onCancel(p.id)}>Cancel</Button>}
           </Paper>
         ))}
         {!posts.length && <Typography variant="caption" color="text.secondary">No posts yet.</Typography>}
