@@ -70,6 +70,9 @@ TO ops_app;
 -- file_uploads holds media bytes served via /api/social/media/:token.
 GRANT SELECT, INSERT, UPDATE, DELETE ON file_uploads TO ops_app;
 
+-- Pro AI chat tables.
+GRANT SELECT, INSERT, UPDATE, DELETE ON ops_chat_threads, ops_chat_messages TO ops_app;
+
 -- 5. Sequences for the ops-owned tables (serial/identity inserts).
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ops_app;
 
