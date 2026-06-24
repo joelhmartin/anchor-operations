@@ -73,6 +73,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON file_uploads TO ops_app;
 -- Pro AI chat tables.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ops_chat_threads, ops_chat_messages TO ops_app;
 
+-- Blog publisher.
+GRANT SELECT, INSERT, UPDATE, DELETE ON ops_blog_posts TO ops_app;
+-- WordPress site mapping (read) — needed to resolve a client's WP sites.
+GRANT SELECT ON oauth_resources TO ops_app;
+
 -- 5. Sequences for the ops-owned tables (serial/identity inserts).
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ops_app;
 

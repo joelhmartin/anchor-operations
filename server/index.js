@@ -15,6 +15,7 @@ import { attachOperationsWebSocket } from './ws/operationsTerminal.js';
 import { runOpsMigrations } from './migrations.js';
 import { isDemoMode } from './services/demoMode.js';
 import { runDuePosts } from './services/socialPublisher.js';
+import { runDueBlogPosts } from './services/ops/blog/blogPublisher.js';
 import { healthCheckPage } from './services/metaPagePosting.js';
 import { query } from './db.js';
 
@@ -157,6 +158,15 @@ const httpServer = app.listen(PORT, () => {
         await runDuePosts();
       } catch (e) {
         console.error('[cron:social-publish]', e?.message);
+      }
+    }, { timezone: 'America/New_York' });
+
+    // Content suite — publish due blog posts to clients' WordPress sites.
+    cron.schedule('*/2 * * * *', async () => {
+      try {
+        await runDueBlogPosts();
+      } catch (e) {
+        console.error('[cron:blog-publish]', e?.message);
       }
     }, { timezone: 'America/New_York' });
 

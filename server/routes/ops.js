@@ -45,6 +45,11 @@ import {
   updateRecipe,
   archiveRecipe
 } from '../services/ops/skills/recipes.js';
+import multer from 'multer';
+import { storeFile } from '../services/fileStorage.js';
+import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites } from '../services/ops/blog/blogStore.js';
+
+const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -1613,6 +1618,65 @@ router.get('/checks', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'list_checks_failed', message: e.message });
   }
+});
+
+// ── Blog publishing ───────────────────────────────────────────────────────
+router.get('/blog/sites/:clientId', async (req, res) => {
+  if (!isUuid(req.params.clientId)) return badUuid(res, 'clientId');
+  try { res.json({ sites: await listClientWpSites(req.params.clientId) }); }
+  catch (err) { console.error('[ops] GET /blog/sites failed:', err); res.status(500).json({ message: 'Failed to load WordPress sites' }); }
+});
+
+router.get('/blog/posts', async (req, res) => {
+  const clientId = req.query.clientId && isUuid(req.query.clientId) ? req.query.clientId : null;
+  try { res.json({ posts: await blogList(clientId) }); }
+  catch (err) { console.error('[ops] GET /blog/posts failed:', err); res.status(500).json({ message: 'Failed to load posts' }); }
+});
+
+router.post('/blog/posts', async (req, res) => {
+  const b = req.body || {};
+  if (!isUuid(b.client_user_id)) return badUuid(res, 'client_user_id');
+  if (!(await isOperationsClient(b.client_user_id))) return res.status(404).json({ message: 'Client not found' });
+  const action = b.action || 'draft'; // draft | schedule | publish_now
+  let status = 'draft';
+  let scheduledFor = null;
+  if (action === 'schedule') { status = 'scheduled'; scheduledFor = b.scheduled_for || null; }
+  else if (action === 'publish_now') { status = 'scheduled'; scheduledFor = new Date().toISOString(); }
+  try {
+    const post = await blogCreate({
+      clientId: b.client_user_id, createdBy: req.user.id,
+      oauthConnectionId: b.oauth_connection_id || null, siteResourceId: b.site_resource_id || null, siteUrl: b.site_url || null,
+      title: String(b.title || 'Untitled'), contentMarkdown: String(b.content_markdown || ''),
+      featuredFileUploadId: b.featured_file_upload_id || null, status, scheduledFor
+    });
+    res.json({ post });
+  } catch (err) { console.error('[ops] POST /blog/posts failed:', err); res.status(500).json({ message: 'Failed to create post' }); }
+});
+
+router.patch('/blog/posts/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'id');
+  try { const post = await blogUpdate(req.params.id, req.body || {}); if (!post) return res.status(404).json({ message: 'Not found' }); res.json({ post }); }
+  catch (err) { console.error('[ops] PATCH /blog/posts/:id failed:', err); res.status(500).json({ message: 'Failed to update' }); }
+});
+
+router.post('/blog/posts/:id/cancel', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'id');
+  try { const post = await blogCancel(req.params.id); if (!post) return res.status(409).json({ message: 'Cannot cancel in current state' }); res.json({ post }); }
+  catch (err) { console.error('[ops] POST /blog/posts/:id/cancel failed:', err); res.status(500).json({ message: 'Failed to cancel' }); }
+});
+
+router.delete('/blog/posts/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'id');
+  try { await blogDelete(req.params.id); res.json({ ok: true }); }
+  catch (err) { console.error('[ops] DELETE /blog/posts/:id failed:', err); res.status(500).json({ message: 'Failed to delete' }); }
+});
+
+router.post('/blog/media', blogUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file' });
+  try {
+    const stored = await storeFile(req.file, { category: 'blog', ownerId: req.user.id, ownerType: 'ops_blog' });
+    res.json(stored); // { id, url }
+  } catch (err) { console.error('[ops] POST /blog/media failed:', err); res.status(500).json({ message: 'Upload failed' }); }
 });
 
 export default router;
