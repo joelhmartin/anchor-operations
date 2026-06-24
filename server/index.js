@@ -149,30 +149,32 @@ const httpServer = app.listen(PORT, () => {
     }, 60_000);
   }
 
-  // Content suite — publish due social posts. runDuePosts() claims rows with
-  // FOR UPDATE SKIP LOCKED, so this is the single publisher (cron lives only here).
-  cron.schedule('*/2 * * * *', async () => {
-    try {
-      await runDuePosts();
-    } catch (e) {
-      console.error('[cron:social-publish]', e?.message);
-    }
-  }, { timezone: 'America/New_York' });
-
-  // Content suite — daily health-check of every active page link so token
-  // problems surface in the UI before a scheduled post fails.
-  cron.schedule('0 4 * * *', async () => {
-    try {
-      const { rows } = await query('SELECT id FROM meta_page_links WHERE archived_at IS NULL');
-      for (const r of rows) {
-        try { await healthCheckPage(r.id); } catch (_) { /* tracked in DB */ }
+  if (!isDemoMode()) {
+    // Content suite — publish due social posts. runDuePosts() claims rows with
+    // FOR UPDATE SKIP LOCKED, so this is the single publisher (cron lives only here).
+    cron.schedule('*/2 * * * *', async () => {
+      try {
+        await runDuePosts();
+      } catch (e) {
+        console.error('[cron:social-publish]', e?.message);
       }
-    } catch (e) {
-      console.error('[cron:social-health]', e?.message);
-    }
-  }, { timezone: 'America/New_York' });
+    }, { timezone: 'America/New_York' });
 
-  backfillSocialClientLinks();
+    // Content suite — daily health-check of every active page link so token
+    // problems surface in the UI before a scheduled post fails.
+    cron.schedule('0 4 * * *', async () => {
+      try {
+        const { rows } = await query('SELECT id FROM meta_page_links WHERE archived_at IS NULL');
+        for (const r of rows) {
+          try { await healthCheckPage(r.id); } catch (_) { /* tracked in DB */ }
+        }
+      } catch (e) {
+        console.error('[cron:social-health]', e?.message);
+      }
+    }, { timezone: 'America/New_York' });
+
+    backfillSocialClientLinks();
+  }
 });
 
 // Content suite — one-shot backfill: auto-link clients with exactly one FB page.
