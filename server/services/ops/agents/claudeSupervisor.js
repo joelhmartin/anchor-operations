@@ -171,6 +171,40 @@ export async function runClaudeChatTurn({
     pendingApprovalId = out.proposedTool?.approval_id || null;
   }
 
+  // ── Persist synthetic tool_result when paused for approval ────────────────
+  // The Anthropic Messages API requires every assistant tool_use block to be
+  // immediately followed by a user turn containing a matching tool_result.
+  // Without this, replaying the thread history on the next turn returns 400
+  // and the thread becomes permanently unusable.
+  if (out.status === 'awaiting_approval') {
+    let proposeToolUseId = null;
+    for (let i = out.messages.length - 1; i >= 0; i -= 1) {
+      const m = out.messages[i];
+      if (m.role === 'assistant' && Array.isArray(m.content)) {
+        const block = m.content.find((b) => b.type === 'tool_use');
+        if (block) {
+          proposeToolUseId = block.id;
+          break;
+        }
+      }
+    }
+    if (proposeToolUseId) {
+      const pendingResultContent = [
+        {
+          type: 'tool_result',
+          tool_use_id: proposeToolUseId,
+          content: `Proposed action routed to the admin approval queue (approval_id: ${pendingApprovalId || 'unknown'}). It has NOT executed yet — the admin will approve or reject it in the UI.`
+        }
+      ];
+      await query(
+        `INSERT INTO ops_chat_messages
+           (thread_id, role, content_json, usage_json, cost_cents)
+         VALUES ($1,'user',$2,NULL,0)`,
+        [thread.id, JSON.stringify(pendingResultContent)]
+      );
+    }
+  }
+
   return {
     threadId: thread.id,
     status: out.status,
