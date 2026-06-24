@@ -31,7 +31,8 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_monthly_cap.sql',
   'migrate_ops_audit_runs_deprecation_marker.sql',
   'migrate_ops_discoveries_upgrade.sql',
-  'migrate_ops_skills_and_bulk.sql'
+  'migrate_ops_skills_and_bulk.sql',
+  'migrate_social_publishing.sql'
 ];
 
 const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql'];
