@@ -17,6 +17,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import ChatIcon from '@mui/icons-material/Chat';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import MainCard from 'ui-component/cards/MainCard';
 import useAuth from 'hooks/useAuth';
 import ClientChat from './Chat/ClientChat';
@@ -24,12 +25,14 @@ import ClientChat from './Chat/ClientChat';
 const CommandCenterTab = lazy(() => import('./CommandCenter/CommandCenterTab'));
 const DiscoveriesTab = lazy(() => import('./Discoveries/DiscoveriesTab'));
 const BulkTab = lazy(() => import('./Bulk/BulkTab'));
+const ContentTab = lazy(() => import('./Content/ContentTab'));
 
 const WORKSPACE_TABS = [
   { value: 'command-center', label: 'Command Center', Icon: DashboardIcon },
   { value: 'discoveries', label: 'Discoveries', Icon: ReportProblemIcon },
   { value: 'agent', label: 'Agent', Icon: ChatIcon },
-  { value: 'bulk', label: 'Bulk', Icon: PlayCircleOutlineIcon }
+  { value: 'bulk', label: 'Bulk', Icon: PlayCircleOutlineIcon },
+  { value: 'content', label: 'Content', Icon: EditCalendarIcon }
 ];
 
 // Back-compat aliases — pre-pivot URLs land on the right new tab and, where
@@ -164,6 +167,9 @@ export default function Operations() {
           </TabPanel>
           <TabPanel activeTab={activeTab} value="bulk">
             <BulkTab />
+          </TabPanel>
+          <TabPanel activeTab={activeTab} value="content">
+            <ContentTab />
           </TabPanel>
         </Suspense>
       </Stack>
