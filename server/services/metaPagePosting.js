@@ -2,7 +2,7 @@
  * Meta Page Posting — token resolution + link/health helpers.
  *
  * - Resolves per-Page tokens from the system user (lazy refresh on miss).
- * - Stores tokens AES-256-GCM encrypted via services/security/encryption.js
+ * - Stores tokens AES-256-GCM encrypted via services/security/encryption.
  * - Throws typed errors matching Meta Graph API's error envelope so callers
  *   can branch on `code` (190 = token expired) and HTTP status.
  */
