@@ -26,11 +26,31 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
     maxBytes = DEFAULT_MAX_BYTES,
     headers = {},
     redirectLimit = 3,
-    bodyEncoding = 'utf8'
+    bodyEncoding = 'utf8',
+    // Optional AbortSignal. The ops run executor passes a per-check signal
+    // here so a check-timeout or run-level cancel actually tears down the
+    // socket instead of leaving a hung request burning bytes after the
+    // executor moved on.
+    signal
   } = opts;
+
+  // Fast-fail when the signal is already aborted so we don't open a socket.
+  if (signal?.aborted) {
+    const reason = signal.reason;
+    throw reason instanceof Error ? reason : new Error('fetch aborted');
+  }
 
   // Validate URL + DNS-resolve hostname against the SSRF block-list.
   const parsed = await assertPublicHttpUrl(rawUrl);
+
+  // Re-check after the DNS await: AbortSignal does not replay 'abort' events
+  // to listeners attached after the abort fired, so a signal that flipped
+  // during DNS would otherwise slip past and let the socket run to its own
+  // timeout instead of being torn down.
+  if (signal?.aborted) {
+    const reason = signal.reason;
+    throw reason instanceof Error ? reason : new Error('fetch aborted');
+  }
 
   return new Promise((resolve, reject) => {
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -56,6 +76,8 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
         ) {
           const next = new URL(res.headers.location, parsed).toString();
           res.resume();
+          // Pass `signal` (already in `opts`) through so a mid-redirect abort
+          // tears down the next hop as well.
           safeHttpFetch(next, { ...opts, redirectLimit: redirectLimit - 1 }).then(resolve, reject);
           return;
         }
@@ -83,6 +105,20 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
         res.on('error', reject);
       }
     );
+
+    // Wire the AbortSignal: on abort, destroy the request (cuts the socket and
+    // emits 'close'), then reject with the abort reason. Cleanup the listener
+    // on any termination so the controller isn't pinned by a dangling handler.
+    let onAbort;
+    if (signal) {
+      onAbort = () => {
+        const reason = signal.reason;
+        req.destroy();
+        reject(reason instanceof Error ? reason : new Error('fetch aborted'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      req.on('close', () => signal.removeEventListener('abort', onAbort));
+    }
 
     req.on('error', reject);
     req.on('timeout', () => {

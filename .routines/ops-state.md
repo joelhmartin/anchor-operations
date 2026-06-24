@@ -65,4 +65,5 @@ Aspects merged before/outside this repo's PR history (none yet — this repo's p
 
 Deferred items discovered during runs. Each line prefixed with the discovering aspect slug. Format: `- [{aspect-slug}] {description}`.
 
-(none yet)
+- [runexec-check-timeout-abortsignal] Google Ads check handlers (`server/services/ops/checks/google_ads/**`) cannot honor `ctx.signal` until the `google-ads-api` gRPC adapter (via `getCustomerClient`) exposes a cancellation hook — a hung GAQL query past the per-check timeout still consumes resources and tokens. Needs an upstream library bump or a custom gRPC wrapper.
+- [runexec-check-timeout-abortsignal] Meta + CTM check handlers don't call `safeHttpFetch` directly — their internal adapters (`meta/_client.js`, ctm collectors) need the same signal-threading treatment so a per-check timeout actually aborts their in-flight HTTP/SDK calls. Same shape as the Google Ads gap.

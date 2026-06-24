@@ -40,25 +40,86 @@ function tierBudget(tier) {
 }
 
 /**
- * Race a promise against a timeout. On timeout, the original work continues
- * but its result is ignored — handlers should be cancellation-aware once we
- * wire AbortSignal in Phase 2.
+ * Build a per-check AbortController whose signal aborts on EITHER:
+ *   (a) the per-check timeout firing after `timeoutMs`, or
+ *   (b) the run-level (parent) signal aborting (user cancel / SIGTERM drain).
+ *
+ * The returned signal is threaded into `ctx.signal` so handlers (and the
+ * `safeHttpFetch` helper they call) can stop in-flight HTTP / token-burning
+ * work the moment the deadline trips, instead of leaking sockets and Vertex
+ * spend past it. Legacy handlers that ignore the signal degrade to the old
+ * behavior — their result is still ignored once the executor moves on.
+ *
+ * Caller must invoke `dispose()` after the check settles so the timer and
+ * the parent-signal listener don't pin the controller.
  */
-function withTimeout(promise, ms, label) {
+function createCheckAbort(timeoutMs, label, parentSignal) {
+  const controller = new AbortController();
+
+  if (parentSignal?.aborted) {
+    controller.abort(parentSignal.reason ?? new Error('run cancelled'));
+    return { signal: controller.signal, dispose: () => {} };
+  }
+
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`check timeout after ${timeoutMs}ms: ${label}`));
+  }, timeoutMs);
+
+  const onParentAbort = () => {
+    controller.abort(parentSignal.reason ?? new Error('run cancelled'));
+  };
+  parentSignal?.addEventListener?.('abort', onParentAbort, { once: true });
+
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener?.('abort', onParentAbort);
+    }
+  };
+}
+
+/**
+ * Race a handler promise against an AbortSignal. Resolves with the handler's
+ * value if it finishes first; rejects with the signal's abort reason (or a
+ * generic abort error) when the signal fires first.
+ *
+ * Note: this CANNOT cancel an awaited promise on its own. Cancellation of the
+ * underlying work happens via the AbortSignal that was threaded into
+ * `ctx.signal` (and from there into `safeHttpFetch`); the race only releases
+ * the executor so the next check can start.
+ */
+function raceAgainstAbort(promise, signal) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => {
-      reject(new Error(`check timeout after ${ms}ms: ${label}`));
-    }, ms);
-    promise.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      }
-    );
+    let settled = false;
+
+    const reject_ = (reason) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      reject(reason);
+    };
+    const resolve_ = (value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => {
+      const reason = signal.reason;
+      reject_(reason instanceof Error ? reason : new Error('aborted'));
+    };
+
+    // Attach the promise's settlement callbacks BEFORE the early-abort check so
+    // a pre-aborted signal can't strand a rejection without a handler — even if
+    // a future caller invokes us with an already-aborted signal and a handler
+    // promise that later rejects, the rejection has a sink.
+    promise.then(resolve_, reject_);
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -464,13 +525,19 @@ export async function executeRun(runId, options = {}) {
       continue;
     }
 
+    // Per-check abort: the signal in ctx is now combined (timeout + run cancel)
+    // rather than the bare run-level signal. Handlers (and safeHttpFetch) that
+    // honor it stop their in-flight work the moment the deadline trips.
+    const timeoutMs = entry.config?.timeoutMs || DEFAULT_CHECK_TIMEOUT_MS;
+    const checkAbort = createCheckAbort(timeoutMs, entry.check_id, signal);
+
     const ctx = {
       runId,
       clientUserId: run.client_user_id,
       config: entry.config || {},
       credentials,
       tier: run.tier,
-      signal
+      signal: checkAbort.signal
     };
 
     const startedTs = Date.now();
@@ -481,10 +548,9 @@ export async function executeRun(runId, options = {}) {
     // is authoritative for the run-level dollar accumulator below.
     let rawCostCents = null;
     try {
-      const raw = await withTimeout(
+      const raw = await raceAgainstAbort(
         Promise.resolve().then(() => def.handler(ctx, checkTracker)),
-        ctx.config.timeoutMs || DEFAULT_CHECK_TIMEOUT_MS,
-        entry.check_id
+        checkAbort.signal
       );
       if (raw?.cost_cents != null) rawCostCents = Number(raw.cost_cents) || 0;
       outcome = {
@@ -494,13 +560,29 @@ export async function executeRun(runId, options = {}) {
         cost_cents: raw?.cost_cents ?? checkTracker.totalCents() ?? def.costEstimate ?? 0
       };
     } catch (err) {
-      hadError = true;
+      // A run-level cancel that fires mid-check is not a check failure: the
+      // user/drain stopped the run, the check never had a chance. Persist it
+      // as 'skipped' (the codebase's catch-all for "didn't run", per
+      // supervisor.js counts) and don't flip hadError, which would force the
+      // run's final status to 'partial' instead of 'cancelled'. A per-check
+      // timeout (parent signal not aborted) still records as 'error'.
+      const cancelled = signal?.aborted === true;
+      if (!cancelled) hadError = true;
+      // Reconcile cost from the partial tracker on the failure / timeout path:
+      // tracker entries accrued before the abort are real spend that should
+      // still count against the run total. checkTracker.totalCents() is a
+      // ceil of whatever fractional dollars made it in; def.costEstimate is
+      // the existing nominal-budget fallback when the tracker is empty.
       outcome = {
-        status: 'error',
-        severity: 'warning',
+        status: cancelled ? 'skipped' : 'error',
+        severity: cancelled ? null : 'warning',
         payload: { error: err.message },
         cost_cents: checkTracker.totalCents() || def.costEstimate || 0
       };
+    } finally {
+      // Always release the timeout + parent-signal listener; without this the
+      // pending setTimeout would keep the controller alive until it fires.
+      checkAbort.dispose();
     }
     outcome.duration_ms = Date.now() - startedTs;
 

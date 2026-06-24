@@ -26,7 +26,8 @@ registerCheck('web.uptime.reachable', {
         method: 'HEAD',
         timeoutMs: 10_000,
         maxBytes: 64 * 1024,
-        redirectLimit: 3
+        redirectLimit: 3,
+        signal: ctx.signal
       });
       const ok = res.status >= 200 && res.status < 400;
       return {
