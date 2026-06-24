@@ -27,6 +27,7 @@ SERVICE_NAME="anchor-ops"
 # the service and are preserved (no need to re-set them every deploy).
 SECRETS="SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest"
 SECRETS+=",FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest"
+SECRETS+=",ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest"
 
 DRY_RUN="false"; [[ "${1:-}" == "--dry-run" ]] && DRY_RUN="true"
 
