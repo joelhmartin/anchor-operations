@@ -30,7 +30,7 @@ const ContentTab = lazy(() => import('./Content/ContentTab'));
 const WORKSPACE_TABS = [
   { value: 'command-center', label: 'Command Center', Icon: DashboardIcon },
   { value: 'discoveries', label: 'Discoveries', Icon: ReportProblemIcon },
-  { value: 'agent', label: 'Agent', Icon: ChatIcon },
+  { value: 'agent', label: 'Chat', Icon: ChatIcon },
   { value: 'bulk', label: 'Bulk', Icon: PlayCircleOutlineIcon },
   { value: 'content', label: 'Content', Icon: EditCalendarIcon }
 ];
