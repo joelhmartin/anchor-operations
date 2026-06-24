@@ -87,8 +87,9 @@ export async function runClaudeChatTurn({
 }) {
   // ── Resolve or create thread ──────────────────────────────────────────────
   let thread;
+  let loaded = null;
   if (threadId) {
-    const loaded = await loadThread(threadId);
+    loaded = await loadThread(threadId);
     if (!loaded) throw new Error('Thread not found');
     thread = loaded.thread;
   } else {
@@ -102,7 +103,7 @@ export async function runClaudeChatTurn({
   const chosenModel = resolveChatModel(modelId || thread.model_id);
 
   // ── Build prior history + append new user turn ────────────────────────────
-  const priorRows = threadId ? (await loadThread(thread.id)).messages : [];
+  const priorRows = threadId ? loaded.messages : [];
   const messages = historyToMessages(priorRows);
 
   const userContent = [{ type: 'text', text: String(prompt || '') }];
@@ -142,6 +143,7 @@ export async function runClaudeChatTurn({
   let lastAssistantId = null;
   for (let i = before; i < out.messages.length; i += 1) {
     const m = out.messages[i];
+    const isLastMessage = i === out.messages.length - 1;
     const { rows } = await query(
       `INSERT INTO ops_chat_messages
          (thread_id, role, content_json, usage_json, cost_cents)
@@ -151,8 +153,8 @@ export async function runClaudeChatTurn({
         thread.id,
         m.role,
         JSON.stringify(m.content),
-        JSON.stringify(out.status === 'final' ? costTracker.summary() : null),
-        costTracker.summary().total_cents
+        isLastMessage && out.status === 'final' ? JSON.stringify(costTracker.summary()) : null,
+        isLastMessage ? costTracker.summary().total_cents : 0
       ]
     );
     if (m.role === 'assistant') lastAssistantId = rows[0].id;
