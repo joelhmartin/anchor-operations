@@ -1,69 +1,45 @@
 #!/bin/bash
 set -euo pipefail
-# Build + push + deploy the anchor-ops Cloud Run SERVICE (web + API + WS).
-# Idempotent: `gcloud run deploy` creates on first run, updates after.
+# Deploy the anchor-ops Cloud Run SERVICE (web + API + WS) from source.
 #   ./scripts/gdeploy.sh [--dry-run]
+#
+# Uses `gcloud run deploy --source` so Cloud Build builds the image natively on
+# amd64 (Cloud Run's arch) and pushes it to the `cloud-run-source-deploy` repo
+# the service already runs from. This is an INCREMENTAL deploy: it ships the
+# current code and ensures the content-suite secrets are mapped, while PRESERVING
+# the service's existing service account, env vars, Cloud SQL connection, scaling,
+# and all other secrets (that config is the live service's own state — this
+# script intentionally does not redefine it).
+#
+# History: the previous version did a local `docker build` + push to a repo named
+# `anchor-hub-repo`. On Apple Silicon that produced an arm64 image (Cloud Run
+# rejects it: "exec format error"), and `anchor-hub-repo` does not exist. It also
+# passed a `--service-account` / `--set-env-vars` set that did not match the live
+# service. All of that was removed in favour of `--source`.
 
 PROJECT_ID="anchor-hub-480305"
 REGION="us-central1"
 SERVICE_NAME="anchor-ops"
-ARTIFACT_REPO_NAME="anchor-hub-repo"
-IMAGE_NAME="anchor-ops"
-SERVICE_ACCOUNT_EMAIL="anchor-ops@${PROJECT_ID}.iam.gserviceaccount.com"
-CLOUD_SQL_INSTANCE="${PROJECT_ID}:${REGION}:anchor"
+
+# Content suite (social publishing) secrets — the SAME Secret Manager secrets the
+# main app (anchor-hub) uses, so page-token decryption and media-token validation
+# work across both apps. DATABASE_URL / JWT_SECRET / ENCRYPTION_KEY are already on
+# the service and are preserved (no need to re-set them every deploy).
+SECRETS="SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest"
+SECRETS+=",FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest"
 
 DRY_RUN="false"; [[ "${1:-}" == "--dry-run" ]] && DRY_RUN="true"
 
-GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo manual)
-IMAGE_TAG="${GIT_SHA}-$(date +%Y%m%d%H%M%S)"
-IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/${IMAGE_NAME}:${IMAGE_TAG}"
-
-# Secret env mapping. DATABASE_URL -> ops_app role; AES+JWT reuse anchor-hub's
-# (byte-identical => decryption + SSO work). Agency tokens reuse the shared set.
-SECRETS="DATABASE_URL=anchor-db-url-ops:latest"
-SECRETS+=",ENCRYPTION_KEY=ENCRYPTION_KEY:latest,JWT_SECRET=JWT_SECRET:latest"
-SECRETS+=",GOOGLE_ADS_DEVELOPER_TOKEN=GOOGLE_ADS_DEVELOPER_TOKEN:latest"
-SECRETS+=",GOOGLE_ADS_REFRESH_TOKEN=GOOGLE_ADS_REFRESH_TOKEN:latest"
-SECRETS+=",GOOGLE_ADS_MANAGER_ID=GOOGLE_ADS_MANAGER_ID:latest"
-SECRETS+=",GOOGLE_ADS_CLIENT_ID=GOOGLE_ADS_CLIENT_ID:latest"
-SECRETS+=",GOOGLE_ADS_CLIENT_SECRET=GOOGLE_ADS_CLIENT_SECRET:latest"
-SECRETS+=",FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest"
-# Content suite (social publishing): HMAC secret for signed media tokens — same
-# secret as anchor-hub, so media tokens minted by either app validate everywhere.
-SECRETS+=",SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest"
-SECRETS+=",KINSTA_API_KEY=KINSTA_API_KEY:latest,KINSTA_USER=KINSTA_USER:latest"
-SECRETS+=",KINSTA_USER_PASSWORD=KINSTA_USER_PASSWORD:latest,KINSTA_AGENCY_ID=KINSTA_AGENCY_ID:latest"
-SECRETS+=",CTM_API_KEY=CTM_API_KEY:latest,CTM_API_SECRET=CTM_API_SECRET:latest"
-SECRETS+=",MAILGUN_API_KEY=MAILGUN_API_KEY:latest,MAILGUN_DOMAIN=MAILGUN_DOMAIN:latest"
-SECRETS+=",MAILGUN_DEFAULT_FROM=MAILGUN_DEFAULT_FROM:latest"
-SECRETS+=",GA4_SERVICE_ACCOUNT_KEY=GA4_SERVICE_ACCOUNT_KEY:latest"
-SECRETS+=",REPORT_RENDER_SECRET=report-render-secret:latest"
-
-ENVVARS="NODE_ENV=production,RUN_MIGRATIONS_ON_START=false"
-ENVVARS+=",GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_REGION=${REGION}"
-ENVVARS+=",VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION}"
-ENVVARS+=",OPS_REPORTS_BUCKET=anchor-ops-reports-${PROJECT_ID}"
-ENVVARS+=",OPS_RUN_SUBSCRIPTION=ops-runner,OPS_RUNNER_CONCURRENCY=4"
-
-echo "=== Deploy ${SERVICE_NAME} (dry-run=${DRY_RUN}) image=${IMG} ==="
+echo "=== Deploy ${SERVICE_NAME} from source (dry-run=${DRY_RUN}) ==="
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "[dry-run] docker build -t ${IMG} . && push && gcloud run deploy ${SERVICE_NAME} ..."
-  echo "[dry-run] secrets: ${SECRETS}"
+  echo "[dry-run] gcloud run deploy ${SERVICE_NAME} --source . \\"
+  echo "            --project=${PROJECT_ID} --region=${REGION} \\"
+  echo "            --update-secrets=${SECRETS}"
   exit 0
 fi
 
-docker build -t "${IMG}" .
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-docker push "${IMG}"
-
-gcloud run deploy "${SERVICE_NAME}" \
+gcloud run deploy "${SERVICE_NAME}" --source . \
   --project="${PROJECT_ID}" --region="${REGION}" \
-  --image="${IMG}" \
-  --service-account="${SERVICE_ACCOUNT_EMAIL}" \
-  --add-cloudsql-instances="${CLOUD_SQL_INSTANCE}" \
-  --set-secrets="${SECRETS}" \
-  --set-env-vars="${ENVVARS}" \
-  --memory=1Gi --cpu=1 --min-instances=0 --max-instances=4 \
-  --allow-unauthenticated
+  --update-secrets="${SECRETS}"
 
-echo "=== Deployed. RUN_MIGRATIONS_ON_START is false — run migrations once as admin (see infra/provision-ops.sh). ==="
+echo "=== Deployed. RUN_MIGRATIONS_ON_START is false — run ops migrations once as admin (see infra/provision-ops.sh). ==="
