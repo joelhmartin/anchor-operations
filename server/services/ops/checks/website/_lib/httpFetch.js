@@ -43,6 +43,15 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
   // Validate URL + DNS-resolve hostname against the SSRF block-list.
   const parsed = await assertPublicHttpUrl(rawUrl);
 
+  // Re-check after the DNS await: AbortSignal does not replay 'abort' events
+  // to listeners attached after the abort fired, so a signal that flipped
+  // during DNS would otherwise slip past and let the socket run to its own
+  // timeout instead of being torn down.
+  if (signal?.aborted) {
+    const reason = signal.reason;
+    throw reason instanceof Error ? reason : new Error('fetch aborted');
+  }
+
   return new Promise((resolve, reject) => {
     const lib = parsed.protocol === 'https:' ? https : http;
     const req = lib.request(

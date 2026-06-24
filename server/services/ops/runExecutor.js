@@ -110,12 +110,16 @@ function raceAgainstAbort(promise, signal) {
       reject_(reason instanceof Error ? reason : new Error('aborted'));
     };
 
+    // Attach the promise's settlement callbacks BEFORE the early-abort check so
+    // a pre-aborted signal can't strand a rejection without a handler — even if
+    // a future caller invokes us with an already-aborted signal and a handler
+    // promise that later rejects, the rejection has a sink.
+    promise.then(resolve_, reject_);
     if (signal.aborted) {
       onAbort();
       return;
     }
     signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve_, reject_);
   });
 }
 
@@ -556,15 +560,22 @@ export async function executeRun(runId, options = {}) {
         cost_cents: raw?.cost_cents ?? checkTracker.totalCents() ?? def.costEstimate ?? 0
       };
     } catch (err) {
-      hadError = true;
+      // A run-level cancel that fires mid-check is not a check failure: the
+      // user/drain stopped the run, the check never had a chance. Persist it
+      // as 'skipped' (the codebase's catch-all for "didn't run", per
+      // supervisor.js counts) and don't flip hadError, which would force the
+      // run's final status to 'partial' instead of 'cancelled'. A per-check
+      // timeout (parent signal not aborted) still records as 'error'.
+      const cancelled = signal?.aborted === true;
+      if (!cancelled) hadError = true;
       // Reconcile cost from the partial tracker on the failure / timeout path:
       // tracker entries accrued before the abort are real spend that should
       // still count against the run total. checkTracker.totalCents() is a
       // ceil of whatever fractional dollars made it in; def.costEstimate is
       // the existing nominal-budget fallback when the tracker is empty.
       outcome = {
-        status: 'error',
-        severity: 'warning',
+        status: cancelled ? 'skipped' : 'error',
+        severity: cancelled ? null : 'warning',
         payload: { error: err.message },
         cost_cents: checkTracker.totalCents() || def.costEstimate || 0
       };
