@@ -60,7 +60,7 @@ export async function wpCreatePost(siteUrl, auth, { title, html, featuredMediaId
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`WP post create failed (${res.status})`);
+    throw new Error(`WP post create failed (${res.status})${text ? `: ${text.slice(0, 300)}` : ''}`);
   }
   const json = await res.json();
   return { id: String(json.id), url: json.link || null };

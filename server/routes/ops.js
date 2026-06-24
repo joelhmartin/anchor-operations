@@ -47,8 +47,7 @@ import {
 } from '../services/ops/skills/recipes.js';
 import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
-import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, getPost as blogGet, listClientWpSites } from '../services/ops/blog/blogStore.js';
-import { publishBlogPost } from '../services/ops/blog/blogPublisher.js';
+import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites } from '../services/ops/blog/blogStore.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
