@@ -14,7 +14,9 @@ const MAX_OUTPUT_TOKENS = 4096;
 
 function usageDollars(modelId, usage = {}) {
   const p = priceFor(modelId);
-  const inTok = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) * 0.25 + (usage.cache_read_input_tokens || 0) * 0.1;
+  const inTok = (usage.input_tokens || 0)
+            + (usage.cache_creation_input_tokens || 0) * 1.25
+            + (usage.cache_read_input_tokens || 0) * 0.1;
   const outTok = usage.output_tokens || 0;
   return (inTok / 1000) * p.inPer1k + (outTok / 1000) * p.outPer1k;
 }
@@ -24,10 +26,13 @@ function withCaching(system, messages) {
   const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
   const msgs = messages.map((m) => ({ ...m }));
   const last = msgs[msgs.length - 1];
-  if (last && Array.isArray(last.content) && last.content.length) {
-    const c = last.content.map((b) => ({ ...b }));
-    c[c.length - 1] = { ...c[c.length - 1], cache_control: { type: 'ephemeral' } };
-    msgs[msgs.length - 1] = { ...last, content: c };
+  if (last) {
+    const raw = Array.isArray(last.content) ? last.content : [{ type: 'text', text: last.content }];
+    if (raw.length) {
+      const c = raw.map((b) => ({ ...b }));
+      c[c.length - 1] = { ...c[c.length - 1], cache_control: { type: 'ephemeral' } };
+      msgs[msgs.length - 1] = { ...last, content: c };
+    }
   }
   return { sys, msgs };
 }
