@@ -3,7 +3,7 @@ import { query, getClient } from '../../../db.js';
 import { resolveWpConnection, wpCreatePost, wpUploadMedia } from './wpClient.js';
 import { mdToHtml } from './markdown.js';
 
-const FETCH_SQL = `SELECT * FROM ops_blog_posts WHERE id = $1`;
+const FETCH_SQL = `SELECT * FROM ops_blog_posts WHERE id = $1 AND status = 'publishing'`;
 const CLAIM_SQL = `UPDATE ops_blog_posts SET status='publishing', updated_at=NOW()
   WHERE id=$1 AND status IN ('scheduled','draft','failed') RETURNING *`;
 
@@ -42,10 +42,14 @@ export async function publishBlogPost(id, options = {}) {
     );
     return { ok: true, wpPostId: created.id, wpPostUrl: created.url };
   } catch (err) {
-    await query(
-      `UPDATE ops_blog_posts SET status='failed', failed_at=NOW(), error=$2, retry_count=retry_count+1, updated_at=NOW() WHERE id=$1`,
-      [id, String(err.message || err).slice(0, 500)]
-    );
+    try {
+      await query(
+        `UPDATE ops_blog_posts SET status='failed', failed_at=NOW(), error=$2, retry_count=retry_count+1, updated_at=NOW() WHERE id=$1`,
+        [id, String(err.message || err).slice(0, 500)]
+      );
+    } catch (e2) {
+      console.error('[blog] failed to mark failure', id, e2?.message);
+    }
     return { ok: false, reason: 'error' };
   }
 }

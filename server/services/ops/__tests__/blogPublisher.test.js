@@ -31,4 +31,7 @@ test('runDueBlogPosts claims scheduled + retry-eligible failed posts', async () 
   assert.ok(sel, 'ran a select against ops_blog_posts');
   assert.match(sel.sql, /status = 'scheduled'/);
   assert.match(sel.sql, /FOR UPDATE SKIP LOCKED/);
+  assert.match(sel.sql, /status = 'failed'/);
+  assert.match(sel.sql, /retry_count < 3/);
+  assert.match(sel.sql, /INTERVAL '15 minutes'/);
 });
