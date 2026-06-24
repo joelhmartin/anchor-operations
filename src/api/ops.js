@@ -92,3 +92,9 @@ export const approveOpsChatAction = (approvalId) => client.post('/ops/chat/appro
 
 export const rejectOpsChatAction = (approvalId, reason = null) =>
   client.post('/ops/chat/reject', { approval_id: approvalId, reason }).then((res) => res.data);
+
+export const listOpsChatThreads = (clientUserId) =>
+  client.get('/ops/chat/threads', { params: clientUserId ? { clientUserId } : {} }).then((res) => res.data.threads || []);
+
+export const getOpsChatThread = (threadId) =>
+  client.get(`/ops/chat/threads/${threadId}`).then((res) => res.data);
