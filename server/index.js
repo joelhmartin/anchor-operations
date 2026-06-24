@@ -6,12 +6,17 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 
+import cron from 'node-cron';
 import authRouter from './auth.js';
 import opsRouter from './routes/ops.js';
 import operationsRouter from './routes/operations.js';
+import socialRouter from './routes/social.js';
 import { attachOperationsWebSocket } from './ws/operationsTerminal.js';
 import { runOpsMigrations } from './migrations.js';
 import { isDemoMode } from './services/demoMode.js';
+import { runDuePosts } from './services/socialPublisher.js';
+import { healthCheckPage } from './services/metaPagePosting.js';
+import { query } from './db.js';
 
 const app = express();
 // Cloud Run sets PORT=8080; prefer it over API_SERVER_PORT.
@@ -99,6 +104,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'anchor-ops'
 app.use('/api/auth', authRouter);
 app.use('/api/ops', opsRouter); // Operations command center (rebuild)
 app.use('/api/operations', operationsRouter); // Legacy Kinsta site/SSH/bulk endpoints
+app.use('/api/social', socialRouter); // Content suite — FB/IG publishing (ported from main app)
 
 // Avatars live in the shared users table as `/api/hub/users/:id/avatar` paths and
 // are served by the dashboard's public avatar route. Redirect those requests there.
@@ -142,7 +148,61 @@ const httpServer = app.listen(PORT, () => {
       tickBulkSchedules().catch(() => {});
     }, 60_000);
   }
+
+  // Content suite — publish due social posts. runDuePosts() claims rows with
+  // FOR UPDATE SKIP LOCKED, so this is the single publisher (cron lives only here).
+  cron.schedule('*/2 * * * *', async () => {
+    try {
+      await runDuePosts();
+    } catch (e) {
+      console.error('[cron:social-publish]', e?.message);
+    }
+  }, { timezone: 'America/New_York' });
+
+  // Content suite — daily health-check of every active page link so token
+  // problems surface in the UI before a scheduled post fails.
+  cron.schedule('0 4 * * *', async () => {
+    try {
+      const { rows } = await query('SELECT id FROM meta_page_links WHERE archived_at IS NULL');
+      for (const r of rows) {
+        try { await healthCheckPage(r.id); } catch (_) { /* tracked in DB */ }
+      }
+    } catch (e) {
+      console.error('[cron:social-health]', e?.message);
+    }
+  }, { timezone: 'America/New_York' });
+
+  backfillSocialClientLinks();
 });
+
+// Content suite — one-shot backfill: auto-link clients with exactly one FB page.
+async function backfillSocialClientLinks() {
+  try {
+    const { rows } = await query(
+      `SELECT DISTINCT client_id
+         FROM oauth_resources
+        WHERE provider = 'facebook'
+          AND resource_type = 'facebook_page'
+          AND is_enabled = TRUE`
+    );
+    if (!rows.length) return;
+    const { syncClientFacebookLinks } = await import('./services/socialClientLinkSync.js');
+    let touched = 0;
+    for (const r of rows) {
+      try {
+        const result = await syncClientFacebookLinks(r.client_id, { actorId: null });
+        if (result.autoLinked) touched++;
+      } catch (e) {
+        console.error('[backfill:social-links] client', r.client_id, e?.message);
+      }
+    }
+    if (touched > 0) {
+      console.warn(`[backfill:social-links] auto-linked ${touched} clients`);
+    }
+  } catch (e) {
+    console.error('[backfill:social-links] failed:', e?.message);
+  }
+}
 
 async function tickBulkSchedules() {
   try {
