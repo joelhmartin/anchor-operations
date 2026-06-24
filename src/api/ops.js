@@ -85,9 +85,6 @@ export const updateOpsRunDefinition = (id, body) => client.put(`/ops/run-definit
 
 // ---------------- Phase 7: AI chat ----------------
 
-export const sendOpsChat = ({ clientUserId, prompt, history }) =>
-  client.post('/ops/chat', { client_user_id: clientUserId, prompt, history }).then((res) => res.data);
-
 export const approveOpsChatAction = (approvalId) => client.post('/ops/chat/approve', { approval_id: approvalId }).then((res) => res.data);
 
 export const rejectOpsChatAction = (approvalId, reason = null) =>
