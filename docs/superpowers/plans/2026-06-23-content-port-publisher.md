@@ -762,14 +762,31 @@ VIMEO_ACCESS_TOKEN=             # resolve Vimeo direct file URLs for video posts
 # main app or existing page_access_token_encrypted rows will not decrypt.
 ```
 
-- [ ] **Step 2: Wire the secrets into Cloud Run** (production — document in PR, run at deploy time)
+- [ ] **Step 2: Wire the secrets into Cloud Run** (production — run at deploy time)
+
+**VERIFIED 2026-06-24 (gcloud, project `anchor-hub-480305`):** the secrets already exist
+in Secret Manager with names identical to the env vars — `ENCRYPTION_KEY`, `JWT_SECRET`,
+`FACEBOOK_SYSTEM_USER_TOKEN`, `SOCIAL_MEDIA_SECRET`. `ENCRYPTION_KEY` + `JWT_SECRET` are
+already mapped onto `anchor-ops` (SSO + token decryption work; same secret as main → match
+is inherent). The `anchor-ops` service account (`333281424614-compute@…`) has
+**project-level `roles/secretmanager.secretAccessor`**, so no per-secret IAM grant is
+needed. So the ONLY mapping still required is the two new env vars — and because they point
+at the *same* Secret Manager secrets the main app uses, the "must match main app" /
+token-drain concern does not apply:
 
 ```bash
-gcloud run services update anchor-ops \
-  --update-secrets=FACEBOOK_SYSTEM_USER_TOKEN=meta-system-user-token:latest,SOCIAL_MEDIA_SECRET=social-media-secret:latest,VIMEO_ACCESS_TOKEN=vimeo-access-token:latest
-# Ensure the anchor-ops service account has secretAccessor on each secret.
+gcloud run services update anchor-ops --project anchor-hub-480305 --region us-central1 \
+  --update-secrets=SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest,FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest
 ```
-> `ENCRYPTION_KEY` and `FACEBOOK_SYSTEM_USER_TOKEN` are already shared per the three-app plan; confirm `SOCIAL_MEDIA_SECRET` and `VIMEO_ACCESS_TOKEN` exist in Secret Manager (create from the main app's values if not). If `SOCIAL_MEDIA_SECRET` can't match the main app's exactly, accept that in-flight media tokens (1-hour TTL) issued by the old app will 401 after cutover — drain by waiting one hour or re-minting.
+> `VIMEO_ACCESS_TOKEN` does **not** exist in Secret Manager and is **not** set on the main
+> app either — so Vimeo *video* posting is inert in prod today; ops matching that is fine.
+> Only create + map it if/when Vimeo video posts are wanted.
+> **`ops_app` GRANT — DONE:** verified 2026-06-24 that `ops_app` had ZERO privileges on
+> `meta_page_links` / `social_posts` / `social_media_tokens` / `file_uploads`; the GRANT
+> from `infra/sql/ops_app_role.sql` was applied to the prod DB (as owner `jmartin`) and
+> re-verified — `ops_app` now has SELECT/INSERT/UPDATE/DELETE on all four. (Note
+> `anchor-ops` runs `RUN_MIGRATIONS_ON_START=false`; the social tables already exist in the
+> shared DB, so the migration does not need to run on deploy.)
 
 - [ ] **Step 3: End-to-end publish smoke test** (against an internal/test FB page, local or staging)
 

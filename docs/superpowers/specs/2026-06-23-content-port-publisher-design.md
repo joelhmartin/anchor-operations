@@ -106,16 +106,23 @@ and `file_uploads` already exist there and already hold live data. Therefore:
 
 ## 5. Secrets / env ops needs
 
-| Var | Why | Source |
-|---|---|---|
-| `FACEBOOK_SYSTEM_USER_TOKEN` | List pages, derive page tokens, FB/IG posting | Shared Secret Manager (`meta-system-user-token`) |
-| `ENCRYPTION_KEY` | Decrypt/encrypt `page_access_token_encrypted` — must be byte-identical to main | Already shared (SSO/decrypt) |
-| Vimeo creds (e.g. `VIMEO_ACCESS_TOKEN`) | Resolve Vimeo direct file URLs for video posts | Shared Secret Manager |
-| `SOCIAL_MEDIA_TOKEN_SECRET` (or whatever `socialMediaTokens.js` reads) | HMAC media tokens | Match main app's value so in-flight tokens stay valid; else accept short token churn |
+**VERIFIED 2026-06-24** against project `anchor-hub-480305` (gcloud). The actual env-var
+name read by `socialMediaTokens.js` is `SOCIAL_MEDIA_SECRET` (not `SOCIAL_MEDIA_TOKEN_SECRET`);
+`vimeo.js` reads `VIMEO_ACCESS_TOKEN`. Secret Manager secret names are identical to the env
+vars.
 
-Wire via `gcloud run services update anchor-ops --update-secrets=...` + IAM binding per
-the three-app plan. Confirm exact env var names by reading each service file during
-implementation.
+| Var | Why | Status (verified 2026-06-24) |
+|---|---|---|
+| `ENCRYPTION_KEY` | Decrypt/encrypt `page_access_token_encrypted` — byte-identical to main | ✅ Already mapped on `anchor-ops` (same secret as main) |
+| `JWT_SECRET` | SSO | ✅ Already mapped on `anchor-ops` |
+| `FACEBOOK_SYSTEM_USER_TOKEN` | List pages, derive page tokens, FB/IG posting | Secret exists; ⚠️ **not yet mapped** onto `anchor-ops` |
+| `SOCIAL_MEDIA_SECRET` | HMAC media tokens | Secret exists; ⚠️ **not yet mapped** onto `anchor-ops`. Maps to the *same* secret as main → token validity preserved, no churn |
+| `VIMEO_ACCESS_TOKEN` | Vimeo direct file URLs for video posts | ❌ Not in Secret Manager and not on the main app either → Vimeo video posting inert until created (not a blocker; parity with main) |
+
+The `anchor-ops` service account (`333281424614-compute@…`) has **project-level
+`roles/secretmanager.secretAccessor`** — no per-secret IAM binding needed. So the only
+deploy action is mapping the two un-mapped secrets:
+`gcloud run services update anchor-ops --project anchor-hub-480305 --region us-central1 --update-secrets=SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest,FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest`
 
 ---
 
