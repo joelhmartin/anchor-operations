@@ -60,6 +60,16 @@ BEGIN
 END
 $$;
 
+-- Social publishing tables (shared with the main app; ops now owns publishing).
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  meta_page_links,
+  social_posts,
+  social_media_tokens
+TO ops_app;
+
+-- file_uploads holds media bytes served via /api/social/media/:token.
+GRANT SELECT, INSERT, UPDATE, DELETE ON file_uploads TO ops_app;
+
 -- 5. Sequences for the ops-owned tables (serial/identity inserts).
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ops_app;
 
