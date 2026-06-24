@@ -22,7 +22,8 @@ import { logSecurityEvent, SecurityEventTypes, SecurityEventCategories } from '.
 import { handleFanoutRequest, authorizeFanoutRequest, fanOutBulkSchedule, computeNextRunAt } from '../services/ops/scheduleFanout.js';
 import { getReportSignedUrl } from '../services/ops/reportRenderer.js';
 import { sendPortfolioDigest } from '../services/ops/emailDigest.js';
-import { runSupervisorTurn, executeApproval, rejectApproval } from '../services/ops/agents/supervisor.js';
+import { executeApproval, rejectApproval } from '../services/ops/agents/supervisor.js';
+import { runClaudeChatTurn, listThreads, loadThread } from '../services/ops/agents/claudeSupervisor.js';
 import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js';
 import { listAllChecks } from '../services/ops/checks/registry.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
@@ -1304,39 +1305,64 @@ function chatRateLimit(limitType) {
 }
 
 router.post('/chat', chatRateLimit('operations_assistant_user'), async (req, res) => {
-  const { client_user_id, prompt = '', history = [], model_id = null } = req.body || {};
-  if (!isUuid(client_user_id)) return badUuid(res, 'client_user_id');
-  try {
-    if (!(await isOperationsClient(client_user_id))) {
-      return res.status(404).json({ message: 'Client account not found' });
-    }
-    const result = await runSupervisorTurn({
-      clientUserId: client_user_id,
-      userId: req.user.id,
-      history: Array.isArray(history) ? history : [],
-      prompt: String(prompt || ''),
-      modelId: model_id || null
-    });
+  const { client_user_id, thread_id = null, prompt = '', model_id = null } = req.body || {};
+  if (thread_id && !isUuid(thread_id)) return badUuid(res, 'thread_id');
+  if (client_user_id && !isUuid(client_user_id)) return badUuid(res, 'client_user_id');
+  if (client_user_id && !(await isOperationsClient(client_user_id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
 
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  req.on('close', () => { /* client aborted; loop finishes its current hop then no-op */ });
+
+  try {
+    const result = await runClaudeChatTurn({
+      clientUserId: client_user_id || null,
+      userId: req.user.id,
+      threadId: thread_id,
+      prompt: String(prompt || ''),
+      modelId: model_id,
+      onEvent: (evt) => send(evt.type, evt)
+    });
     let pendingApproval = null;
     if (result.pendingApprovalId) {
-      const { rows } = await query(`SELECT id, tool_name, args_json, created_at FROM ops_tool_approvals WHERE id = $1`, [
-        result.pendingApprovalId
-      ]);
+      const { rows } = await query(`SELECT id, tool_name, args_json, created_at FROM ops_tool_approvals WHERE id = $1`, [result.pendingApprovalId]);
       pendingApproval = rows[0] || null;
     }
-
-    res.json({
-      messages: result.messages,
-      status: result.status,
-      text: result.text,
-      pendingApproval,
-      hopsUsed: result.hopsUsed,
-      costSummary: result.costSummary
-    });
+    send('done', { threadId: result.threadId, status: result.status, text: result.text, pendingApproval, costSummary: result.costSummary });
   } catch (err) {
-    console.error('[ops] POST /chat failed:', err);
-    res.status(500).json({ message: err.message || 'Chat failed' });
+    console.error('[ops] POST /chat (stream) failed:', err);
+    send('error', { message: err.message || 'Chat failed' });
+  } finally {
+    res.end();
+  }
+});
+
+router.get('/chat/threads', async (req, res) => {
+  const clientUserId = req.query.clientUserId && isUuid(req.query.clientUserId) ? req.query.clientUserId : null;
+  try {
+    res.json({ threads: await listThreads(clientUserId) });
+  } catch (err) {
+    console.error('[ops] GET /chat/threads failed:', err);
+    res.status(500).json({ message: 'Failed to load threads' });
+  }
+});
+
+router.get('/chat/threads/:id', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'thread id');
+  try {
+    const data = await loadThread(req.params.id);
+    if (!data) return res.status(404).json({ message: 'Thread not found' });
+    res.json(data);
+  } catch (err) {
+    console.error('[ops] GET /chat/threads/:id failed:', err);
+    res.status(500).json({ message: 'Failed to load thread' });
   }
 });
 
