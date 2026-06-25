@@ -1171,6 +1171,9 @@ router.get('/clients/:id/credentials/gsc/oauth/callback', async (req, res) => {
 router.post('/clients/:id/credentials/:credentialId/validate', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
   if (!isUuid(req.params.credentialId)) return badUuid(res, 'credential id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
 
   // Phase 1 records the result; per-platform validators land in later phases.
   const { ok = false, error = null } = req.body || {};
@@ -1314,6 +1317,9 @@ router.get('/cost-summary', async (req, res) => {
 // PUT /clients/:clientUserId/cap — edit per-client monthly cap
 router.put('/clients/:clientUserId/cap', async (req, res) => {
   if (!isUuid(req.params.clientUserId)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.clientUserId))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
   const { ops_monthly_cap_cents } = req.body || {};
   const cap = parseInt(ops_monthly_cap_cents, 10);
   if (!Number.isFinite(cap) || cap < 0 || cap > 100000) {
