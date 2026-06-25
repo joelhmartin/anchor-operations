@@ -50,10 +50,23 @@ export default function ClientSitesPanel({ clientUserId }) {
     if (!picked) return;
     setLinking(true);
     try {
-      await linkSiteToClient(picked.id, { client_user_id: clientUserId, relationship: 'primary' });
+      const newLink = await linkSiteToClient(picked.id, { client_user_id: clientUserId, relationship: 'primary' });
+      // Append immediately so the new site shows without waiting on the refetch.
+      // The list endpoint aliases kinsta_site_clients.id as link_id; the POST returns it as id.
+      setSites((prev) => [
+        ...prev,
+        {
+          site_id: picked.id,
+          link_id: newLink?.link_id ?? newLink?.id,
+          display_name: picked.display_name,
+          site_name: picked.site_name,
+          relationship: 'primary',
+          primary_domain: picked.primary_domain ?? null
+        }
+      ]);
       showToast('Site assigned to client', 'success');
       setPicked(null);
-      reload();
+      reload(); // safety net only
     } catch (err) {
       showToast(err?.response?.data?.message || 'Failed to assign site', 'error');
     } finally {
@@ -63,13 +76,14 @@ export default function ClientSitesPanel({ clientUserId }) {
 
   const unassign = async (site) => {
     // client-site rows use site_id (site UUID) and link_id (the join-table row UUID)
+    // Remove immediately; restore via reload() on error.
+    setSites((prev) => prev.filter((s) => s.link_id !== site.link_id));
     try {
       await unlinkSiteClient(site.site_id, site.link_id);
-      setSites((prev) => prev.filter((s) => s.link_id !== site.link_id));
       showToast('Site unlinked', 'success');
     } catch (err) {
       showToast(err?.response?.data?.message || 'Failed to unlink', 'error');
-      reload();
+      reload(); // restore
     }
   };
 
