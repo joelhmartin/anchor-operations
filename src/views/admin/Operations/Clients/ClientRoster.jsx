@@ -20,23 +20,42 @@ export default function ClientRoster() {
   }, [clients, q, statusByClient]);
 
   return (
-    <Box sx={{ width: 260, borderRight: 1, borderColor: 'divider', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 1.5 }}>
+    <Box
+      sx={{
+        width: 280,
+        borderRight: 1,
+        borderColor: 'divider',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.default'
+      }}
+    >
+      <Box sx={{ p: 2, pb: 1.5 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Clients
+        </Typography>
         <TextField size="small" fullWidth placeholder="Search clients" value={q} onChange={(e) => setQ(e.target.value)} />
       </Box>
-      <List dense sx={{ overflowY: 'auto' }}>
-        {clientsLoading && <Typography sx={{ px: 2, py: 1 }} variant="body2" color="text.secondary">Loading…</Typography>}
+      <List dense sx={{ overflowY: 'auto', px: 1, pb: 1 }}>
+        {clientsLoading && (
+          <Typography sx={{ px: 1, py: 1 }} variant="body2" color="text.secondary">
+            Loading…
+          </Typography>
+        )}
         {!clientsLoading && rows.length === 0 && (
-          <Typography sx={{ px: 2, py: 1 }} variant="body2" color="text.secondary">No clients</Typography>
+          <Typography sx={{ px: 1, py: 1 }} variant="body2" color="text.secondary">
+            No clients
+          </Typography>
         )}
         {rows.map((c) => (
-          <ListItemButton key={c.id} selected={c.id === clientUserId} onClick={() => setClientUserId(c.id)}>
-            <Badge
-              color="error"
-              variant="dot"
-              invisible={statusByClient.get(c.id) !== 'critical'}
-              sx={{ mr: 1.5 }}
-            />
+          <ListItemButton
+            key={c.id}
+            selected={c.id === clientUserId}
+            onClick={() => setClientUserId(c.id)}
+            sx={{ borderRadius: 1, mb: 0.25 }}
+          >
+            <Badge color="error" variant="dot" invisible={statusByClient.get(c.id) !== 'critical'} sx={{ mr: 1.5 }} />
             <ListItemText primary={c._label} primaryTypographyProps={{ noWrap: true }} />
           </ListItemButton>
         ))}

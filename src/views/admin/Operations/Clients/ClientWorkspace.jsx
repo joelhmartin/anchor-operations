@@ -55,10 +55,10 @@ export default function ClientWorkspace() {
 
   return (
     <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ px: 2, pt: 2 }}>
+      <Box sx={{ px: 3, pt: 2.5, pb: 1 }}>
         <Typography variant="h3">{clientLabel(activeClient)}</Typography>
       </Box>
-      <Box sx={{ px: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ px: 3, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
         <Tabs value={primaryValue} onChange={(_, v) => setSection(v)} variant="scrollable" scrollButtons="auto">
           {CLIENT_SECTIONS.map((s) => (
             <Tab key={s.value} value={s.value} label={s.label} />
@@ -83,7 +83,7 @@ export default function ClientWorkspace() {
           ))}
         </Menu>
       </Box>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 3 }}>
         <SectionBody section={section} clientUserId={activeClient.id} activeClient={activeClient} setSection={setSection} key={`${activeClient.id}:${section}`} />
       </Box>
     </Box>

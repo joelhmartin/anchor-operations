@@ -1,7 +1,7 @@
 /**
  * ClientOverview — curated digest section for a single client.
  *
- * Shows: 4 stat cards (open findings, posts scheduled, MTD spend, monthly cap),
+ * Shows: 4 stat tiles (open findings, posts scheduled, MTD spend, monthly cap),
  * top 5 notable findings (deep-links to Findings section), and scheduled-soon
  * content (blogs + social) in the next 48h.
  *
@@ -9,20 +9,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  Grid,
-  List,
-  ListItemButton,
-  ListItemText,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Box, Chip, Grid, List, ListItemButton, ListItemText, Stack, Typography } from '@mui/material';
 import { getClientOverview } from 'api/ops';
 import { useOpsWorkspace } from '../OpsWorkspaceContext';
+import SubCard from 'ui-component/cards/SubCard';
 import EmptyState from 'ui-component/extended/EmptyState';
 
 // Severity strings ('critical', 'warning', 'info') are not in StatusChip's map,
@@ -42,18 +32,25 @@ function SeverityChip({ severity, size = 'small', sx }) {
   return <Chip label={label} color={color} size={size} sx={sx} />;
 }
 
-function StatCard({ label, value }) {
+function StatTile({ label, value }) {
   return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
-        <Typography variant="h2" gutterBottom>
-          {value}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {label}
-        </Typography>
-      </CardContent>
-    </Card>
+    <Box
+      sx={{
+        height: '100%',
+        p: 2.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 2,
+        bgcolor: 'background.paper'
+      }}
+    >
+      <Typography variant="h2" sx={{ fontWeight: 700, mb: 0.5 }}>
+        {value}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+    </Box>
   );
 }
 
@@ -71,9 +68,15 @@ export default function ClientOverview({ clientUserId }) {
     let cancelled = false;
     setLoading(true);
     getClientOverview(clientUserId)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch(() => {
+        if (!cancelled) setData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -92,99 +95,89 @@ export default function ClientOverview({ clientUserId }) {
   }
 
   return (
-    <Stack spacing={2}>
-      {/* Stat cards */}
-      <Grid container spacing={2}>
+    <Stack spacing={3}>
+      {/* Stat tiles */}
+      <Grid container spacing={2.5}>
         <Grid item xs={6} md={3}>
-          <StatCard label="Open findings" value={data.counts.openFindings} />
+          <StatTile label="Open findings" value={data.counts.openFindings} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <StatCard label="Posts scheduled" value={data.counts.postsScheduled} />
+          <StatTile label="Posts scheduled" value={data.counts.postsScheduled} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <StatCard label="MTD spend" value={dollars(data.counts.mtdSpendCents)} />
+          <StatTile label="MTD spend" value={dollars(data.counts.mtdSpendCents)} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <StatCard label="Monthly cap" value={dollars(data.counts.capCents)} />
+          <StatTile label="Monthly cap" value={dollars(data.counts.capCents)} />
         </Grid>
       </Grid>
 
       {/* Notable findings */}
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h4" sx={{ flex: 1 }}>
-              Notable findings
-            </Typography>
+      <SubCard
+        title="Notable findings"
+        secondary={
+          data.topFindings.length > 0 && (
             <Chip size="small" label="View all" onClick={() => setSection('findings')} sx={{ cursor: 'pointer' }} />
-          </Box>
-          {data.topFindings.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Nothing needs attention right now.
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {data.topFindings.map((f) => (
-                <ListItemButton key={f.id} onClick={() => setSection('findings')} sx={{ px: 0 }}>
-                  <SeverityChip severity={f.severity} sx={{ mr: 1, flexShrink: 0 }} />
-                  <ListItemText
-                    primary={f.summary}
-                    secondary={f.category}
-                    primaryTypographyProps={{ noWrap: true }}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </CardContent>
-      </Card>
+          )
+        }
+      >
+        {data.topFindings.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Nothing needs attention right now.
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {data.topFindings.map((f) => (
+              <ListItemButton key={f.id} onClick={() => setSection('findings')} sx={{ borderRadius: 1, px: 1 }}>
+                <SeverityChip severity={f.severity} sx={{ mr: 1.5, flexShrink: 0 }} />
+                <ListItemText primary={f.summary} secondary={f.category} primaryTypographyProps={{ noWrap: true }} />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+      </SubCard>
 
       {/* Scheduled soon (next 48h) */}
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="h4" sx={{ mb: 1 }}>
-            Scheduled soon
+      <SubCard title="Scheduled soon">
+        {data.scheduledToday.blogs.length === 0 && data.scheduledToday.social.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No content scheduled in the next 48 hours.
           </Typography>
-          {data.scheduledToday.blogs.length === 0 && data.scheduledToday.social.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No content scheduled in the next 48 hours.
-            </Typography>
-          ) : (
-            <Stack spacing={0.5}>
-              {data.scheduledToday.blogs.map((b) => (
-                <Box key={b.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip
-                    size="small"
-                    label="Blog"
-                    color="primary"
-                    variant="outlined"
-                    onClick={() => setSection('blog')}
-                    sx={{ cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  <Typography variant="body2" noWrap>
-                    {b.title}
-                  </Typography>
-                </Box>
-              ))}
-              {data.scheduledToday.social.map((s) => (
-                <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip
-                    size="small"
-                    label="Social"
-                    color="secondary"
-                    variant="outlined"
-                    onClick={() => setSection('socials')}
-                    sx={{ cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  <Typography variant="body2" noWrap>
-                    {(s.content || '').slice(0, 80)}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
+        ) : (
+          <Stack spacing={1}>
+            {data.scheduledToday.blogs.map((b) => (
+              <Box key={b.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip
+                  size="small"
+                  label="Blog"
+                  color="primary"
+                  variant="outlined"
+                  onClick={() => setSection('blog')}
+                  sx={{ cursor: 'pointer', flexShrink: 0 }}
+                />
+                <Typography variant="body2" noWrap>
+                  {b.title}
+                </Typography>
+              </Box>
+            ))}
+            {data.scheduledToday.social.map((s) => (
+              <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip
+                  size="small"
+                  label="Social"
+                  color="secondary"
+                  variant="outlined"
+                  onClick={() => setSection('socials')}
+                  sx={{ cursor: 'pointer', flexShrink: 0 }}
+                />
+                <Typography variant="body2" noWrap>
+                  {(s.content || '').slice(0, 80)}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </SubCard>
     </Stack>
   );
 }

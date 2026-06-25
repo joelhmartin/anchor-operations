@@ -1,71 +1,81 @@
-# Task 6 Report — Claude supervisor turn
+## Task 6 Report — Config sections + authz/audit gap fixes
 
-## supervisor.js exports added (verbatim)
+### Step 1: `OPERATIONS_CREDENTIAL_DELETED` added to `audit.js`
 
-```javascript
-export function getSupervisorTools() {
-  return Object.values(SUPERVISOR_TOOLS);
-}
-
-export function makeSupervisorRunTool({
-  clientUserId, userId, costTracker,
-  budgetCents = PER_TURN_BUDGET_CENTS
-}) {
-  const ctx = { clientUserId, userId, budgetCents };
-  return async function runTool(name, args) {
-    const tool = SUPERVISOR_TOOLS[name];
-    if (!tool) return { error: `Unknown tool: ${name}` };
-    const result = await tool.handler({ args, ctx, costTracker });
-    if (name === 'propose_action' && result?.approval_id) {
-      return { __awaiting_approval: true, approval_id: result.approval_id, ...result };
-    }
-    return result;
-  };
-}
-
-export async function buildSystemInstruction({ clientUserId }) {
-  const ctxData = await loadRecentRunsContext(clientUserId);
-  return `${SUPERVISOR_SYSTEM}\n\n${buildContextPreamble({ clientUserId, runs: ctxData.runs })}`;
-}
+Added after `OPERATIONS_BULK_SCHEDULE_RUN_NOW` in the `SecurityEventTypes` object:
+```js
+OPERATIONS_CREDENTIAL_DELETED: 'operations.credential_deleted'
 ```
+Style matches all adjacent `OPERATIONS_*` entries.
 
-## Reconciliation notes
+### Step 2: `isOperationsClient` guards in `ops.js`
 
-### propose_action approval signal
-The real handler returns `{ approval_id, status: 'pending', message }` — no flag. Vertex path detects via `if (name === 'propose_action' && result?.approval_id)`. anthropicRuntime pauses on `outcome?.__awaiting_approval`. makeSupervisorRunTool translates: spreads result + adds `__awaiting_approval: true` when condition met. claudeSupervisor reads `out.proposedTool?.approval_id`.
+**Before → After for each handler:**
 
-### System prompt extraction
-buildSystemInstruction calls module-scope loadRecentRunsContext + buildContextPreamble, returns plain string. anthropicRuntime.withCaching wraps it as Anthropic system param (no Vertex role/parts wrapper needed).
+`PUT /clients/:id/subscriptions` (line ~1032):
+- Before: `isUuid` check only; DML proceeded against any UUID, including non-roster clients.
+- After: guard inserted immediately after `isUuid`, before any body parsing or DML:
+  ```js
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
+  ```
 
-### Brief's import path corrected
-Brief wrote `../../db.js` but agents/ is 3 levels from server/. Fixed to `../../../db.js`.
+`PUT /clients/:id/credentials/:platform` (line ~1104):
+- Before: `isUuid` check only; `putCredential` could be called for any UUID.
+- After: same guard pattern after `isUuid`, before platform/body validation.
 
-### SUPERVISOR_TOOLS object key access
-Object keyed by name. getSupervisorTools() returns Object.values(). makeSupervisorRunTool uses SUPERVISOR_TOOLS[name] direct lookup.
+`DELETE /clients/:id/credentials/:credentialId` (line ~1130):
+- Before: two `isUuid` checks, then `deleteCredential` with no roster check.
+- After: guard after both `isUuid` checks, before `deleteCredential`. Mirrors `POST /runs` exactly.
 
-### cost_cents column
-Brief had `/100` (dollars); corrected to store `total_cents` (integer cents).
+**Audit event placement** (DELETE handler):
+- Fires after `await deleteCredential(req.params.credentialId)` succeeds, before `res.status(204).end()`.
+- `details` contains only `{ clientUserId: req.params.id, credentialId: req.params.credentialId }` — no credential values, no PHI.
 
-## Build + lint + test:ops
+### Step 3: Config sections wired in `ClientWorkspace.jsx`
 
-- yarn build: PASS (23.14s, 0 errors)
-- yarn lint: PASS (0 errors, 213 pre-existing prettier warnings)
-- yarn test:ops: 12 pass / 15 fail — 15 failures are pre-existing DB-dependent tests (correlator, CTM, migrations, recipes, skills*). anthropicRuntime (3), models (3), toolSchema (2), socialMediaTokens (4) all green. No regressions.
+- Imported `ClientOpsView` from `'./ClientOpsView'` (same `Clients/` folder).
+- `SectionBody` signature updated to `function SectionBody({ section, clientUserId, activeClient, setSection })`.
+- Added four new cases to the switch:
+  ```jsx
+  case 'health':
+  case 'connections':
+  case 'runs':
+  case 'cost':
+    return (
+      <ClientOpsView
+        clientUserId={clientUserId}
+        clientName={clientLabel(activeClient)}
+        onOpenChat={() => setSection('chat')}
+        onOpenRun={() => setSection('runs')}
+      />
+    );
+  ```
+- Render site updated to pass `activeClient={activeClient}` and `setSection={setSection}` alongside existing props.
 
-## Concerns
+### Build / lint
 
-None.
+- `yarn build`: PASS (built in 21.08s, 0 errors)
+- `yarn lint`: PASS (0 errors, 347 pre-existing prettier warnings — none from changed files)
 
-## Follow-up fixes (c21237a)
+### Deviations from brief
 
-Single loadThread call: line 106 reuses `loaded.messages` from line 92. Cost tracking: only final message writes `cost_cents` + `usage_json`; earlier rows get `cost_cents = 0` and `usage_json = null`.
+- Brief Step 3 referenced `clientLabel(activeClientForName)` / `setSectionRef` as placeholder names; used `clientLabel(activeClient)` and `setSection` matching the actual `useOpsWorkspace()` destructure in `ClientWorkspace`.
+- Brief `_clientLabel` import not needed in `ClientWorkspace` — it was already imported on line 5. No duplicate import added.
 
-## Dangling tool_use fix (a9ba2d4)
+### Self-review checklist
 
-**Bug:** `runClaudeToolLoop` returns `status:'awaiting_approval'` without appending a `tool_result` for the `propose_action` tool_use block. On the next send, `historyToMessages` replays `[..., assistant(tool_use), user(new text)]` — the Anthropic API returns 400 because every tool_use must be immediately followed by a matching tool_result, making the thread permanently unusable.
+- [x] All 3 handlers 404 non-roster clients before any DML
+- [x] Guard placement mirrors `POST /runs` exactly
+- [x] Audit event fires only on successful delete
+- [x] Audit `details` contains no PHI, no credential values
+- [x] `clientLabel` used for client display name
+- [x] `console.warn`/`console.error` only (no `console.log`)
+- [x] No new npm dependencies
 
-**Fix:** In `runClaudeChatTurn`, after the persist loop and after `pendingApprovalId` is resolved, a new block checks `out.status === 'awaiting_approval'`, scans `out.messages` from the end for the last assistant message with a `tool_use` block, captures its `id`, and persists a synthetic user message row (`role='user'`, `cost_cents=0`, `usage_json=NULL`) whose `content_json` is a `tool_result` referencing that id. The content text truthfully states the action is queued and not yet executed.
+### Human follow-ups
 
-**Inserted at:** `claudeSupervisor.js` after line 172 (after `pendingApprovalId` assignment), before the `return` statement.
+- None flagged. `GET /clients/:id/credentials` and `GET /clients/:id/subscriptions` remain unguarded (read-only, low-sensitivity), consistent with existing pattern for GET endpoints in this route file. If a future audit requires roster-gating all reads, those two handlers need the same guard.
 
-**Build:** PASS (33.48s) | **Lint:** PASS (0 errors, 287 pre-existing prettier warnings)
+### Commit
+
+`c46e57f feat(ops): Config sections + close subscription/credential authz & audit gaps`
