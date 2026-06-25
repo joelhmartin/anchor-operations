@@ -8,7 +8,7 @@ import StatusChip from 'ui-component/extended/StatusChip';
 import { listPosts, cancelPost } from 'api/social';
 import { useToast } from 'contexts/ToastContext';
 
-export default function QueueView({ clients = [], refreshKey = 0 }) {
+export default function QueueView({ clients = [], refreshKey = 0, activeClientId }) {
   const toast = useToast();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,14 +18,14 @@ export default function QueueView({ clients = [], refreshKey = 0 }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await listPosts({});
+      const list = await listPosts(activeClientId ? { clientId: activeClientId } : {});
       setPosts(list);
     } catch (e) {
       toast.error(`Load failed: ${e.response?.data?.error || e.message}`);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, activeClientId]);
 
   useEffect(() => {
     refresh();
@@ -36,9 +36,10 @@ export default function QueueView({ clients = [], refreshKey = 0 }) {
   const filtered = useMemo(() => {
     let xs = posts;
     if (statusFilter !== 'all') xs = xs.filter((p) => p.status === statusFilter);
-    if (clientFilter) xs = xs.filter((p) => p.client_id === clientFilter);
+    const effectiveClientFilter = activeClientId || clientFilter;
+    if (effectiveClientFilter) xs = xs.filter((p) => p.client_id === effectiveClientFilter);
     return xs;
-  }, [posts, statusFilter, clientFilter]);
+  }, [posts, statusFilter, clientFilter, activeClientId]);
 
   const handleCancel = async (post) => {
     setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, status: 'cancelled' } : p)));
@@ -116,13 +117,15 @@ export default function QueueView({ clients = [], refreshKey = 0 }) {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
-        <SelectField
-          label="Client filter"
-          value={clientFilter}
-          onChange={(e) => setClientFilter(e.target.value)}
-          options={[{ value: '', label: 'All clients' }, ...clients.map((c) => ({ value: c.id, label: c.name || c.email }))]}
-          sx={{ minWidth: 200 }}
-        />
+        {!activeClientId && (
+          <SelectField
+            label="Client filter"
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            options={[{ value: '', label: 'All clients' }, ...clients.map((c) => ({ value: c.id, label: c.name || c.email }))]}
+            sx={{ minWidth: 200 }}
+          />
+        )}
       </Stack>
       <DataTable
         rows={filtered}

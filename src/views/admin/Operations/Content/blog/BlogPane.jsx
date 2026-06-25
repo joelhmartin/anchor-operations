@@ -9,9 +9,14 @@ import BlogCompose from './BlogCompose';
 
 const STATUS_COLOR = { draft: 'default', scheduled: 'info', publishing: 'warning', published: 'success', failed: 'error', cancelled: 'default' };
 
-export default function BlogPane() {
+export default function BlogPane({ activeClientId }) {
   const [clients, setClients] = useState([]);
   const [client, setClient] = useState(null);
+
+  useEffect(() => {
+    if (!activeClientId) return;
+    if (clients.length) setClient(clients.find((c) => c.id === activeClientId) || null);
+  }, [activeClientId, clients]);
   const [posts, setPosts] = useState([]);
   const toast = useToast();
 
@@ -33,8 +38,10 @@ export default function BlogPane() {
 
   return (
     <Stack spacing={2}>
-      <Autocomplete size="small" options={clients} value={client} getOptionLabel={(c) => clientLabel(c)}
-        onChange={(_, v) => setClient(v)} renderInput={(p) => <TextField {...p} label="Client" />} sx={{ maxWidth: 360 }} />
+      {!activeClientId && (
+        <Autocomplete size="small" options={clients} value={client} getOptionLabel={(c) => clientLabel(c)}
+          onChange={(_, v) => setClient(v)} renderInput={(p) => <TextField {...p} label="Client" />} sx={{ maxWidth: 360 }} />
+      )}
       {client && <BlogCompose client={client} onCreated={refresh} />}
       <Stack spacing={1}>
         <Typography variant="subtitle2">Posts</Typography>

@@ -4,10 +4,23 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { useOpsWorkspace, CLIENT_SECTIONS, CONFIG_SECTIONS } from '../OpsWorkspaceContext';
 import { clientLabel } from '../_clientLabel';
 import EmptyState from 'ui-component/extended/EmptyState';
+import DiscoveriesTab from '../Discoveries/DiscoveriesTab';
+import ContentTab from '../Content/ContentTab';
+import ClientChat from '../Chat/ClientChat';
 
-function SectionBody({ section }) {
-  // Tasks 2–6 replace these placeholders with the real, client-scoped components.
-  return <EmptyState title="Coming up" message={`The "${section}" section renders here.`} />;
+function SectionBody({ section, clientUserId }) {
+  switch (section) {
+    case 'findings':
+      return <DiscoveriesTab activeClientId={clientUserId} onOpenDiscovery={() => {}} onOpenRun={() => {}} />;
+    case 'socials':
+      return <ContentTab activeClientId={clientUserId} mode="social" />;
+    case 'blog':
+      return <ContentTab activeClientId={clientUserId} mode="blog" />;
+    case 'chat':
+      return <ClientChat lockedClientUserId={clientUserId} />;
+    default:
+      return <EmptyState title="Coming up" message={`The "${section}" section renders here.`} />;
+  }
 }
 
 export default function ClientWorkspace() {
@@ -52,7 +65,7 @@ export default function ClientWorkspace() {
         </Menu>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
-        <SectionBody section={section} key={`${activeClient.id}:${section}`} />
+        <SectionBody section={section} clientUserId={activeClient.id} key={`${activeClient.id}:${section}`} />
       </Box>
     </Box>
   );
