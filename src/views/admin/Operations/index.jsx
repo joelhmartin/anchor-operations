@@ -1,13 +1,9 @@
 /**
- * Operations shell — Command Center pivot IA.
+ * Operations shell — client-first left-rail IA.
  *
- * Four top-level tabs: Command Center · Discoveries · Agent · Bulk.
- * Clients and Connections tabs were removed — the Agent tab handles
- * per-client work with a platform selector, and Bulk covers the
- * operational run management previously split across Connections.
- *
- * Back-compat: the previous tab URLs resolve into the new tabs via the
- * alias map below — bookmarks and deep-links from the prior IA continue to work.
+ * Three views (left rail): Home · Clients · Portfolio.
+ * State is query-param-driven: ?view=&clientUserId=&section=
+ * Context: OpsWorkspaceContext (client roster, activeClient, nav helpers).
  */
 
 import { Suspense, lazy } from 'react';
