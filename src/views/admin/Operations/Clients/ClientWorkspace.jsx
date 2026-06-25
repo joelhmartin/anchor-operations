@@ -7,6 +7,7 @@ import EmptyState from 'ui-component/extended/EmptyState';
 import DiscoveriesTab from '../Discoveries/DiscoveriesTab';
 import ContentTab from '../Content/ContentTab';
 import ClientChat from '../Chat/ClientChat';
+import ClientSitesPanel from './ClientSitesPanel';
 
 function SectionBody({ section, clientUserId }) {
   switch (section) {
@@ -18,6 +19,8 @@ function SectionBody({ section, clientUserId }) {
       return <ContentTab activeClientId={clientUserId} mode="blog" />;
     case 'chat':
       return <ClientChat lockedClientUserId={clientUserId} />;
+    case 'sites':
+      return <ClientSitesPanel clientUserId={clientUserId} />;
     default:
       return <EmptyState title="Coming up" message={`The "${section}" section renders here.`} />;
   }
