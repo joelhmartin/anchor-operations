@@ -41,6 +41,8 @@ export const bulkUpdateFindingStatus = (ids, status, note = null) =>
 export const getCommandCenter = () =>
   client.get('/ops/command-center').then((res) => res.data || { discoveries: [], kpis: {}, activity: [] });
 
+export const getOpsHome = () => client.get('/ops/home').then((r) => r.data);
+
 export const listOpsRunDefinitions = () => client.get('/ops/run-definitions').then((res) => res.data || []);
 
 export const listOpsClients = () => client.get('/ops/clients').then((res) => res.data.clients || []);

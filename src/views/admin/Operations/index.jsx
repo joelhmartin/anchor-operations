@@ -18,7 +18,7 @@ import WorkspaceRail from './WorkspaceRail';
 import ClientRoster from './Clients/ClientRoster';
 import ClientWorkspace from './Clients/ClientWorkspace';
 
-const CommandCenterTab = lazy(() => import('./CommandCenter/CommandCenterTab'));
+const HomeDigest = lazy(() => import('./home/HomeDigest'));
 const BulkTab = lazy(() => import('./Bulk/BulkTab'));
 
 function LazyFallback() {
@@ -30,13 +30,7 @@ function LazyFallback() {
 }
 
 function WorkspaceBody() {
-  const { view, setView, setClientUserId, setSection } = useOpsWorkspace();
-
-  // Deep-link helpers reused by Home (Task 5): jump straight to a client section.
-  const openClientSection = (clientUserId, section) => {
-    setClientUserId(clientUserId);
-    setSection(section);
-  };
+  const { view } = useOpsWorkspace();
 
   return (
     <Box sx={{ display: 'flex', height: 'calc(100vh - 160px)', minHeight: 480 }}>
@@ -44,10 +38,7 @@ function WorkspaceBody() {
       {view === 'home' && (
         <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', p: 2 }}>
           <Suspense fallback={<LazyFallback />}>
-            <CommandCenterTab
-              onOpenDiscovery={() => setView('clients')}
-              onOpenDiscoveriesFiltered={(f) => f?.client_user_id && openClientSection(f.client_user_id, 'findings')}
-            />
+            <HomeDigest />
           </Suspense>
         </Box>
       )}
