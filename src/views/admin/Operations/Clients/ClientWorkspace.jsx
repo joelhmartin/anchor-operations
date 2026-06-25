@@ -47,7 +47,11 @@ export default function ClientWorkspace() {
   const [anchorEl, setAnchorEl] = useState(null);
 
   if (!activeClient) {
-    return <EmptyState title="Pick a client" message="Choose a client from the roster to open their workspace." />;
+    return (
+      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4 }}>
+        <EmptyState title="Pick a client" message="Choose a client from the roster to open their workspace." />
+      </Box>
+    );
   }
 
   const inConfig = CONFIG_SECTIONS.some((s) => s.value === section);
