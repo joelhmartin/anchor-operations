@@ -14,7 +14,7 @@ const STATUS_COLOR = {
   publishing: 'info.main'
 };
 
-export default function CalendarView({ refreshKey = 0, onEventClick, onDayClick }) {
+export default function CalendarView({ refreshKey = 0, onEventClick, onDayClick, activeClientId }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState(null);
@@ -22,11 +22,13 @@ export default function CalendarView({ refreshKey = 0, onEventClick, onDayClick 
   useEffect(() => {
     if (!range) return;
     setLoading(true);
-    listPosts({ from: range.from, to: range.to })
+    const params = { from: range.from, to: range.to };
+    if (activeClientId) params.clientId = activeClientId;
+    listPosts(params)
       .then(setPosts)
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
-  }, [range, refreshKey]);
+  }, [range, refreshKey, activeClientId]);
 
   const handleNavigate = (start, end) => setRange({ from: start.toISOString(), to: end.toISOString() });
 

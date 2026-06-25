@@ -1,6 +1,6 @@
 # Operations — Architecture
 
-**Last updated:** 2026-05-05 (Phase 10 — rebuild complete)
+**Last updated:** 2026-06-25 (client-first redesign — Tasks 1–9)
 
 Operations is the multi-platform health-check + AI command center for client
 properties. It runs scheduled and on-demand "runs" across three umbrellas
@@ -23,7 +23,7 @@ and the per-phase docs in `docs/ops-rebuild/phases/`.
 | Reports | In-app HTML reports (PDF deferred per P4) summarizing a run window |
 | Email digest | Mailgun-driven roll-up of new critical findings, opt-in per client subscription |
 | AI supervisor | Per-client chat that delegates to website / google_ads / meta sub-agents; mutations require admin approval |
-| UI | 9-tab command center at `/operations` (Overview, Runs, Findings, Clients, Sites, Bulk, Schedule, Cost, AI Chat) |
+| UI | Left-rail workspace at `/operations` — three views: **Home** (curated digest), **Clients** (roster + per-client page), **Portfolio** (bulk & cost). Per-client page has primary tabs Overview · Findings · Socials · Blog · Sites · Chat and a Config menu with Health checks · Connections · Run history · Cost. |
 
 Built across phases 0–10 of the Operations rebuild (May 2026). Locked
 decisions live in `docs/ops-rebuild/STATE.md`.
@@ -201,25 +201,82 @@ All events route to `SecurityEventCategories.OPERATIONS`.
 
 ---
 
-## 9. UI tabs
+## 9. UI — client-first left-rail IA
 
-`src/views/admin/Operations/index.jsx` (renamed from
-`OperationsWorkspace/` in Phase 10).
+`src/views/admin/Operations/index.jsx` (renamed from `OperationsWorkspace/` in
+Phase 10). Redesigned in the client-first pivot (Tasks 1–9, June 2026).
 
-| Tab | File | Purpose |
+### 9.1 Shell
+
+A 180 px left rail (`WorkspaceRail.jsx`) offers three top-level views. State is
+driven by query params so URLs are deep-linkable and bookmarkable:
+`?view=<home|clients|portfolio>&clientUserId=<uuid>&section=<section>`.
+
+Context provider: `OpsWorkspaceContext.jsx` — loads the client roster on mount
+and derives `activeClient` from `clientUserId`. The `setClientUserId` helper
+always switches `view → clients` and `section → overview`.
+
+### 9.2 Home view
+
+`home/HomeDigest.jsx` — curated digest backed by `GET /api/ops/home`.
+
+| Card | Content | Deep-link on click |
 |---|---|---|
-| Overview | `Overview/OverviewTab.jsx` | KPI strip + 7-day inline-SVG trend |
-| Runs | `Runs/RunsTab.jsx` + `Runs/RunDetail.jsx` | Filter / drill into runs, Re-run, download report |
-| Findings | `Findings/FindingsTab.jsx` | Cross-run feed, ack/resolve, bulk-ack |
-| Clients | `Clients/ClientsTab.jsx` + `Clients/ClientOpsView.jsx` | Per-client run history + subscriptions editor + credentials health + Open Chat |
-| Sites | `Sites/SitesTab.jsx` + `Sites/SiteDrawer.jsx` | Kinsta site list + per-site detail (workspace, terminal, command history, drift findings, client links) |
-| Bulk | `Bulk/BulkActionsTab.jsx` | Run an action against many envs with bounded concurrency |
-| Schedule | `Schedule/ScheduleTab.jsx` | Run definition CRUD, raw JSON `check_set` editor |
-| Cost | `Cost/CostTab.jsx` | Per-client MTD spend with cap chip + "Edit cap" |
-| AI Chat | `Chat/ClientChat.jsx` + `Chat/ApprovalDialog.jsx` | Per-client supervisor turn loop |
+| Needs Attention | Clients with unresolved critical findings; count badge + top finding snippet | Opens client → Findings section |
+| Scheduled Today | Blog posts and social posts publishing today | Opens client → Blog or Socials section |
+| Approvals Waiting | Count of pending `ops_tool_approvals` rows across all clients | Prompt to open a client's Chat section |
 
-Cross-tab navigation is via query params: `?tab=runs&run=<uuid>`,
-`?tab=chat&clientUserId=<uuid>`, `?tab=clients&clientUserId=<uuid>`.
+### 9.3 Clients view
+
+A `Clients/ClientRoster.jsx` sidebar lists all ops-enrolled clients with a
+status dot (red = any open critical finding). Selecting a client navigates to
+`Clients/ClientWorkspace.jsx` which renders:
+
+**Primary tabs** (always visible):
+
+| Section | Component | Purpose |
+|---|---|---|
+| Overview | `Clients/ClientOverview.jsx` | 4 stat cards (open findings, posts scheduled, MTD spend, cap) + top 5 notable findings + content scheduled in next 48h. Backed by `GET /api/ops/clients/:id/overview`. |
+| Findings | `Discoveries/DiscoveriesTab.jsx` | Cross-run finding feed, ack/resolve, bulk-ack — filtered to the active client |
+| Socials | `Content/ContentTab.jsx` (mode=social) | Per-client social post queue |
+| Blog | `Content/ContentTab.jsx` (mode=blog) | Per-client blog queue |
+| Sites | `Clients/ClientSitesPanel.jsx` | Per-client Kinsta site list with assign picker. Revives the orphaned Sites feature using legacy `/api/operations/sites*` endpoints (no new route needed). |
+| Chat | `Chat/ClientChat.jsx` | Per-client AI supervisor turn loop |
+
+**Config menu** (gear button, rendered in `ClientOpsView.jsx`):
+
+All four Config menu items currently open the same shared `ClientOpsView` pane, which shows subscriptions, credential health, and recent runs together in one view. Splitting them into distinct per-section surfaces (dedicated subscription editor, run-history download, cost/cap dialog, etc.) is a planned follow-up.
+
+| Item | Current behaviour |
+|---|---|
+| Health checks | Opens shared `ClientOpsView` pane |
+| Connections | Opens shared `ClientOpsView` pane |
+| Run history | Opens shared `ClientOpsView` pane |
+| Cost | Opens shared `ClientOpsView` pane |
+
+### 9.4 Portfolio view
+
+`portfolio/PortfolioView.jsx` — agency-wide cross-client surfaces:
+
+- `Bulk/BulkTab` — run an action against many environments with bounded concurrency
+- `Cost/CostTab` — per-client MTD spend by tier/sub-agent + "Edit cap"
+
+### 9.5 New API endpoints (client-first redesign)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/ops/home` | Home digest — needs-attention clients, content scheduled today, pending approvals count. Internally delegates to the same `loadCommandCenter()` helper used by `/api/ops/command-center` (unchanged). |
+| `GET` | `/api/ops/clients/:id/overview` | Per-client digest for the Overview section — stat cards, top findings, upcoming content. |
+
+### 9.6 Orphaned pre-pivot folders
+
+The following folders were created during earlier phases and are no longer
+wired into the shell. They are **not deleted** (out of scope) but should not
+receive new feature work:
+
+`Overview/`, `Connections/`, `Runs/`, `Schedule/`, `Cost/` (old tab components),
+`CommandCenter/`, `Discoveries/` (old top-level views), `Sites/` (old top-level
+Sites tab replaced by per-client `Clients/ClientSitesPanel.jsx`).
 
 ---
 
@@ -241,6 +298,16 @@ clients flagged `medical` are HIPAA-protected.
   set.
 - **Credential storage:** `client_platform_credentials.encrypted_blob`
   is AES-256 (`server/services/security/encryption.js`).
+- **Credential deletion audit:** `DELETE /api/ops/clients/:id/credentials/:credentialId`
+  emits a `operations.credential_deleted` security event
+  (`SecurityEventTypes.OPERATIONS_CREDENTIAL_DELETED`,
+  `SecurityEventCategories.OPERATIONS`) with `clientUserId` + `credentialId` in
+  `details`. Added in the client-first redesign.
+- **Authz gaps closed (client-first redesign):** `PUT /clients/:id/subscriptions`,
+  `PUT /clients/:id/credentials/:platform`, and
+  `DELETE /clients/:id/credentials/:credentialId` now all gate on
+  `isOperationsClient(req.params.id)` before executing. Previously these endpoints
+  accepted any valid UUID without verifying the client was enrolled in Operations.
 - **SSRF guard:** `verify_tracking_install`, `psi_run_now`, and any
   outbound HTTP from the agent stack route through
   `server/services/security/ssrfGuard.js` (private-IP block + DNS
@@ -295,6 +362,26 @@ server/routes/
 └── operations.js             # /api/operations/*  — legacy Kinsta surface (findings deprecated)
 
 src/views/admin/Operations/   # Renamed from OperationsWorkspace/ in Phase 10
+├── index.jsx                 # Shell — OpsWorkspaceProvider + WorkspaceBody (view switch)
+├── WorkspaceRail.jsx         # 180 px left rail (Home / Clients / Portfolio)
+├── OpsWorkspaceContext.jsx   # Query-param state, client roster loader, activeClient
+├── _clientLabel.js           # Shared display-name helper
+├── home/
+│   └── HomeDigest.jsx        # Curated home digest (needs-attention, scheduled today, approvals)
+├── Clients/
+│   ├── ClientRoster.jsx      # Left sidebar — client list with status dots
+│   ├── ClientWorkspace.jsx   # Per-client shell — primary tabs + Config menu
+│   ├── ClientOverview.jsx    # Per-client digest (stat cards + findings + upcoming content)
+│   ├── ClientSitesPanel.jsx  # Kinsta sites per client (revived; uses legacy /api/operations/sites*)
+│   └── ClientOpsView.jsx     # Config sections (health / connections / runs / cost)
+├── portfolio/
+│   └── PortfolioView.jsx     # Agency-wide — Bulk + Cost tabs
+└── [orphaned pre-pivot folders — not wired into shell, do not extend]
+    Overview/, Connections/, Runs/, Schedule/, Cost/, CommandCenter/, Discoveries/, Sites/
+
+# One-time data wipe (admin-run, NEVER automated):
+infra/scripts/wipe-ops-activity.mjs   # CLI runner (--dry-run / --apply / --include-social)
+infra/sql/wipe_ops_activity.sql       # Underlying SQL
 ```
 
 ---

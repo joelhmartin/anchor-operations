@@ -40,7 +40,7 @@ function rowsFromMessages(messages) {
   return rows;
 }
 
-export default function ClientChat({ initialClientUserId }) {
+export default function ClientChat({ initialClientUserId, lockedClientUserId }) {
   const toast = useToast();
   const [clients, setClients] = useState([]);
   const [client, setClient] = useState(null);
@@ -62,6 +62,10 @@ export default function ClientChat({ initialClientUserId }) {
   useEffect(() => {
     if (initialClientUserId && clients.length) setClient(clients.find((c) => c.id === initialClientUserId) || null);
   }, [initialClientUserId, clients]);
+  useEffect(() => {
+    if (!lockedClientUserId) return;
+    if (clients.length) setClient(clients.find((c) => c.id === lockedClientUserId) || null);
+  }, [lockedClientUserId, clients]);
   const refreshThreads = useCallback(() => {
     listOpsChatThreads(client?.id).then(setThreads).catch(() => {});
   }, [client]);
@@ -139,9 +143,11 @@ export default function ClientChat({ initialClientUserId }) {
       <ThreadSidebar threads={threads} activeId={threadId} onSelect={openThread} onNew={newChat} />
       <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Autocomplete sx={{ flex: 1 }} size="small" options={clients} value={client}
-            getOptionLabel={(c) => clientLabel(c)} onChange={(_, v) => { setClient(v); newChat(); }}
-            renderInput={(p) => <TextField {...p} label="Client" />} />
+          {!lockedClientUserId && (
+            <Autocomplete sx={{ flex: 1 }} size="small" options={clients} value={client}
+              getOptionLabel={(c) => clientLabel(c)} onChange={(_, v) => { setClient(v); newChat(); }}
+              renderInput={(p) => <TextField {...p} label="Client" />} />
+          )}
           <Select size="small" value={model} onChange={(e) => setModel(e.target.value)} sx={{ minWidth: 200 }}>
             {MODELS.map((m) => <MenuItem key={m.id} value={m.id}>{m.label}</MenuItem>)}
           </Select>

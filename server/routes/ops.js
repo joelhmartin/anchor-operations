@@ -48,6 +48,8 @@ import {
 import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
 import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites } from '../services/ops/blog/blogStore.js';
+import { loadClientOverview } from '../services/ops/clientOverview.js';
+import { loadHomeDigest } from '../services/ops/homeDigest.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -594,67 +596,87 @@ router.post('/findings/bulk-status', async (req, res) => {
 
 // ---------------- Command Center aggregate ----------------
 
+/**
+ * Shared loader — runs the three command-center queries and returns
+ * { discoveries, kpis, activity }.  Used by both /command-center and /home
+ * so /command-center keeps its exact original response shape.
+ */
+async function loadCommandCenter() {
+  const [discoveries, kpiRows, activity] = await Promise.all([
+    query(
+      `
+      SELECT id, run_id, client_user_id, severity, category, summary,
+             status, attention_score, business_impact, affected_platforms,
+             recommended_action_json, proposed_plan_json, owner_user_id,
+             acknowledged_at, created_at
+        FROM ops_findings
+       WHERE status IN ('open','investigating')
+         AND ${opsClientExistsExpression('client_user_id')}
+       ORDER BY attention_score DESC NULLS LAST, created_at DESC
+       LIMIT 25
+      `
+    ),
+    query(
+      `
+      SELECT
+        (SELECT COUNT(DISTINCT client_user_id)::int FROM ops_findings
+          WHERE severity = 'critical'
+            AND status IN ('open','investigating')
+            AND ${opsClientExistsExpression('client_user_id')}) AS clients_at_risk,
+        (SELECT COUNT(*)::int FROM ops_tool_approvals
+          WHERE executed_at IS NULL AND approved_at IS NULL) AS approvals_waiting,
+        (SELECT COUNT(*)::int FROM ops_findings
+          WHERE created_at > NOW() - INTERVAL '24 hours'
+            AND ${opsClientExistsExpression('client_user_id')}) AS changes_24h,
+        (SELECT COUNT(*)::int FROM ops_runs
+          WHERE status = 'running'
+            AND started_at < NOW() - INTERVAL '1 hour'
+            AND ${opsClientExistsExpression('client_user_id')}) AS automation_stuck
+      `
+    ),
+    query(
+      `
+      SELECT event_type, success, created_at, details
+        FROM security_audit_log
+       WHERE event_type LIKE 'operations.%'
+       ORDER BY created_at DESC
+       LIMIT 10
+      `
+    ).catch((err) => {
+      console.warn('[ops] command-center activity query failed:', err?.message || err);
+      return { rows: [] };
+    })
+  ]);
+
+  return {
+    discoveries: discoveries.rows,
+    kpis: kpiRows.rows[0] || {
+      clients_at_risk: 0,
+      approvals_waiting: 0,
+      changes_24h: 0,
+      automation_stuck: 0
+    },
+    activity: activity.rows
+  };
+}
+
 router.get('/command-center', async (req, res) => {
   try {
-    const [discoveries, kpiRows, activity] = await Promise.all([
-      query(
-        `
-        SELECT id, run_id, client_user_id, severity, category, summary,
-               status, attention_score, business_impact, affected_platforms,
-               recommended_action_json, proposed_plan_json, owner_user_id,
-               acknowledged_at, created_at
-          FROM ops_findings
-         WHERE status IN ('open','investigating')
-           AND ${opsClientExistsExpression('client_user_id')}
-         ORDER BY attention_score DESC NULLS LAST, created_at DESC
-         LIMIT 25
-        `
-      ),
-      query(
-        `
-        SELECT
-          (SELECT COUNT(DISTINCT client_user_id)::int FROM ops_findings
-            WHERE severity = 'critical'
-              AND status IN ('open','investigating')
-              AND ${opsClientExistsExpression('client_user_id')}) AS clients_at_risk,
-          (SELECT COUNT(*)::int FROM ops_tool_approvals
-            WHERE executed_at IS NULL AND approved_at IS NULL) AS approvals_waiting,
-          (SELECT COUNT(*)::int FROM ops_findings
-            WHERE created_at > NOW() - INTERVAL '24 hours'
-              AND ${opsClientExistsExpression('client_user_id')}) AS changes_24h,
-          (SELECT COUNT(*)::int FROM ops_runs
-            WHERE status = 'running'
-              AND started_at < NOW() - INTERVAL '1 hour'
-              AND ${opsClientExistsExpression('client_user_id')}) AS automation_stuck
-        `
-      ),
-      query(
-        `
-        SELECT event_type, success, created_at, details
-          FROM security_audit_log
-         WHERE event_type LIKE 'operations.%'
-         ORDER BY created_at DESC
-         LIMIT 10
-        `
-      ).catch((err) => {
-        console.warn('[ops] command-center activity query failed:', err?.message || err);
-        return { rows: [] };
-      })
-    ]);
-
-    res.json({
-      discoveries: discoveries.rows,
-      kpis: kpiRows.rows[0] || {
-        clients_at_risk: 0,
-        approvals_waiting: 0,
-        changes_24h: 0,
-        automation_stuck: 0
-      },
-      activity: activity.rows
-    });
+    res.json(await loadCommandCenter());
   } catch (err) {
     console.error('[ops] GET /command-center failed:', err);
     res.status(500).json({ message: 'Failed to load command center' });
+  }
+});
+
+router.get('/home', async (req, res) => {
+  try {
+    const commandCenter = await loadCommandCenter();
+    const digest = await loadHomeDigest(commandCenter);
+    res.json(digest);
+  } catch (err) {
+    console.error('[ops] GET /home failed:', err);
+    res.status(500).json({ message: 'Failed to load home digest' });
   }
 });
 
@@ -1008,6 +1030,7 @@ router.get('/clients/:id/subscriptions', async (req, res) => {
 
 router.put('/clients/:id/subscriptions', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   const { subscriptions } = req.body || {};
   if (!Array.isArray(subscriptions)) {
     return res.status(400).json({ message: 'subscriptions must be an array' });
@@ -1053,6 +1076,20 @@ router.put('/clients/:id/subscriptions', async (req, res) => {
 
 // ---------------- credentials ----------------
 
+router.get('/clients/:id/overview', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+  try {
+    const overview = await loadClientOverview(req.params.id);
+    res.json(overview);
+  } catch (err) {
+    console.error('[ops] GET /clients/:id/overview failed:', err);
+    res.status(500).json({ message: 'Failed to load client overview' });
+  }
+});
+
 router.get('/clients/:id/credentials', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
   try {
@@ -1066,6 +1103,7 @@ router.get('/clients/:id/credentials', async (req, res) => {
 
 router.put('/clients/:id/credentials/:platform', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   const platform = String(req.params.platform || '').trim();
   if (!platform) return res.status(400).json({ message: 'platform required' });
 
@@ -1092,8 +1130,16 @@ router.put('/clients/:id/credentials/:platform', async (req, res) => {
 router.delete('/clients/:id/credentials/:credentialId', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
   if (!isUuid(req.params.credentialId)) return badUuid(res, 'credential id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   try {
     await deleteCredential(req.params.credentialId);
+    await logSecurityEvent({
+      userId: req.user?.id || null,
+      eventType: SecurityEventTypes.OPERATIONS_CREDENTIAL_DELETED,
+      eventCategory: SecurityEventCategories.OPERATIONS,
+      success: true,
+      details: { clientUserId: req.params.id, credentialId: req.params.credentialId }
+    });
     res.status(204).end();
   } catch (err) {
     console.error('[ops] DELETE credential failed:', err);
@@ -1125,6 +1171,9 @@ router.get('/clients/:id/credentials/gsc/oauth/callback', async (req, res) => {
 router.post('/clients/:id/credentials/:credentialId/validate', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
   if (!isUuid(req.params.credentialId)) return badUuid(res, 'credential id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
 
   // Phase 1 records the result; per-platform validators land in later phases.
   const { ok = false, error = null } = req.body || {};
@@ -1268,6 +1317,9 @@ router.get('/cost-summary', async (req, res) => {
 // PUT /clients/:clientUserId/cap — edit per-client monthly cap
 router.put('/clients/:clientUserId/cap', async (req, res) => {
   if (!isUuid(req.params.clientUserId)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.clientUserId))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
   const { ops_monthly_cap_cents } = req.body || {};
   const cap = parseInt(ops_monthly_cap_cents, 10);
   if (!Number.isFinite(cap) || cap < 0 || cap > 100000) {

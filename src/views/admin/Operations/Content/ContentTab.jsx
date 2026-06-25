@@ -9,9 +9,10 @@ import CalendarView from './CalendarView';
 import ComposeDialog from './ComposeDialog';
 import BlogPane from './blog/BlogPane';
 
-export default function ContentTab() {
+export default function ContentTab({ activeClientId, mode: forcedMode }) {
   const toast = useToast();
   const [mode, setMode] = useState('social');
+  const effectiveMode = forcedMode || mode;
   const [tab, setTab] = useState('calendar');
   const [clients, setClients] = useState([]);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -35,12 +36,14 @@ export default function ContentTab() {
 
   return (
     <Stack spacing={2}>
-      <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => v && setMode(v)} sx={{ mb: 1 }}>
-        <ToggleButton value="social">Social</ToggleButton>
-        <ToggleButton value="blog">Blog</ToggleButton>
-      </ToggleButtonGroup>
-      {mode === 'blog' ? (
-        <BlogPane />
+      {!forcedMode && (
+        <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => v && setMode(v)} sx={{ mb: 1 }}>
+          <ToggleButton value="social">Social</ToggleButton>
+          <ToggleButton value="blog">Blog</ToggleButton>
+        </ToggleButtonGroup>
+      )}
+      {effectiveMode === 'blog' ? (
+        <BlogPane activeClientId={activeClientId} />
       ) : (
         <>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -61,9 +64,10 @@ export default function ContentTab() {
                 onEventClick={() => {
                   /* future: details popover */
                 }}
+                activeClientId={activeClientId}
               />
             )}
-            {tab === 'queue' && <QueueView clients={clients} refreshKey={refreshKey} />}
+            {tab === 'queue' && <QueueView clients={clients} refreshKey={refreshKey} activeClientId={activeClientId} />}
           </Box>
 
           <ComposeDialog

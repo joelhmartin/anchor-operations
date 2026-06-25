@@ -52,7 +52,7 @@ function fmt(ts) {
   }
 }
 
-export default function DiscoveriesTab({ onOpenRun, onOpenDiscovery }) {
+export default function DiscoveriesTab({ onOpenRun, onOpenDiscovery, activeClientId }) {
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || '';
@@ -99,7 +99,8 @@ export default function DiscoveriesTab({ onOpenRun, onOpenDiscovery }) {
     setLoading(true);
     try {
       const params = {};
-      if (clientFilter) params.client_user_id = clientFilter.id;
+      const effectiveClientId = activeClientId || clientFilter?.id || null;
+      if (effectiveClientId) params.client_user_id = effectiveClientId;
       if (severity) params.severity = severity;
       if (statusFilter) params.status = statusFilter;
       else if (openOnly) params.open = 'true';
@@ -111,7 +112,7 @@ export default function DiscoveriesTab({ onOpenRun, onOpenDiscovery }) {
     } finally {
       setLoading(false);
     }
-  }, [clientFilter, severity, statusFilter, openOnly, showToast]);
+  }, [activeClientId, clientFilter, severity, statusFilter, openOnly, showToast]);
 
   useEffect(() => {
     load();
@@ -296,16 +297,18 @@ export default function DiscoveriesTab({ onOpenRun, onOpenDiscovery }) {
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-        <Autocomplete
-          size="small"
-          sx={{ minWidth: 240 }}
-          options={clients}
-          getOptionLabel={clientLabel}
-          value={clientFilter}
-          onChange={(_, v) => setClientFilter(v)}
-          renderInput={(params) => <TextField {...params} label="Client" />}
-          isOptionEqualToValue={(a, b) => a.id === b.id}
-        />
+        {!activeClientId && (
+          <Autocomplete
+            size="small"
+            sx={{ minWidth: 240 }}
+            options={clients}
+            getOptionLabel={clientLabel}
+            value={clientFilter}
+            onChange={(_, v) => setClientFilter(v)}
+            renderInput={(params) => <TextField {...params} label="Client" />}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+          />
+        )}
         <Box sx={{ minWidth: 160 }}>
           <SelectField
             label="Severity"

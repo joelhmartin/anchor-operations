@@ -1,59 +1,21 @@
 /**
- * Operations shell — Command Center pivot IA.
+ * Operations shell — client-first left-rail IA.
  *
- * Four top-level tabs: Command Center · Discoveries · Agent · Bulk.
- * Clients and Connections tabs were removed — the Agent tab handles
- * per-client work with a platform selector, and Bulk covers the
- * operational run management previously split across Connections.
- *
- * Back-compat: the previous tab URLs resolve into the new tabs via the
- * alias map below — bookmarks and deep-links from the prior IA continue to work.
+ * Three views (left rail): Home · Clients · Portfolio.
+ * State is query-param-driven: ?view=&clientUserId=&section=
+ * Context: OpsWorkspaceContext (client roster, activeClient, nav helpers).
  */
 
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Alert, Box, CircularProgress, Stack, Tab, Tabs } from '@mui/material';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import ChatIcon from '@mui/icons-material/Chat';
-import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import EditCalendarIcon from '@mui/icons-material/EditCalendar';
+import { Suspense, lazy } from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import MainCard from 'ui-component/cards/MainCard';
-import useAuth from 'hooks/useAuth';
-import ClientChat from './Chat/ClientChat';
+import { OpsWorkspaceProvider, useOpsWorkspace } from './OpsWorkspaceContext';
+import WorkspaceRail from './WorkspaceRail';
+import ClientRoster from './Clients/ClientRoster';
+import ClientWorkspace from './Clients/ClientWorkspace';
 
-const CommandCenterTab = lazy(() => import('./CommandCenter/CommandCenterTab'));
-const DiscoveriesTab = lazy(() => import('./Discoveries/DiscoveriesTab'));
-const BulkTab = lazy(() => import('./Bulk/BulkTab'));
-const ContentTab = lazy(() => import('./Content/ContentTab'));
-
-const WORKSPACE_TABS = [
-  { value: 'command-center', label: 'Command Center', Icon: DashboardIcon },
-  { value: 'discoveries', label: 'Discoveries', Icon: ReportProblemIcon },
-  { value: 'agent', label: 'Chat', Icon: ChatIcon },
-  { value: 'bulk', label: 'Bulk', Icon: PlayCircleOutlineIcon },
-  { value: 'content', label: 'Content', Icon: EditCalendarIcon }
-];
-
-// Back-compat aliases — pre-pivot URLs land on the right new tab and, where
-// applicable, set the section selector.
-const TAB_ALIASES = {
-  overview: { tab: 'command-center' },
-  findings: { tab: 'discoveries' },
-  chat: { tab: 'agent' },
-  clients: { tab: 'agent' },
-  runs: { tab: 'bulk', section: 'runs' },
-  schedule: { tab: 'bulk', section: 'schedules' },
-  cost: { tab: 'command-center' },
-  sites: { tab: 'command-center' },
-  connections: { tab: 'bulk' },
-  bulk: { tab: 'bulk' }
-};
-
-function TabPanel({ activeTab, value, children }) {
-  if (activeTab !== value) return null;
-  return <Box sx={{ pt: 2 }}>{children}</Box>;
-}
+const HomeDigest = lazy(() => import('./home/HomeDigest'));
+const PortfolioView = lazy(() => import('./portfolio/PortfolioView'));
 
 function LazyFallback() {
   return (
@@ -63,116 +25,42 @@ function LazyFallback() {
   );
 }
 
-export default function Operations() {
-  const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const role = user?.effective_role || user?.role;
-  const canManageOperations = role === 'superadmin' || role === 'admin';
-
-  const requestedTab = searchParams.get('tab') || 'command-center';
-  const alias = TAB_ALIASES[requestedTab];
-  const resolvedTab = alias?.tab || requestedTab;
-  const activeTab = WORKSPACE_TABS.some((tab) => tab.value === resolvedTab) ? resolvedTab : 'command-center';
-
-  // If we hit an alias, rewrite the URL once so future state stays consistent.
-  useEffect(() => {
-    if (!alias) return;
-    const next = new URLSearchParams(searchParams);
-    next.set('tab', alias.tab);
-    if (alias.section && !next.get('section')) next.set('section', alias.section);
-    setSearchParams(next, { replace: true });
-  }, [alias]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const requestedClientUserId = searchParams.get('clientUserId') || null;
-
-  const [pendingClientForChat, setPendingClientForChat] = useState(requestedClientUserId);
-
-  useEffect(() => {
-    setPendingClientForChat(requestedClientUserId);
-  }, [requestedClientUserId]);
-
-  const handleTabChange = useCallback(
-    (_, nextTab) => {
-      const next = new URLSearchParams(searchParams);
-      next.set('tab', nextTab);
-      // Drop section when leaving Bulk so re-entering starts fresh.
-      if (nextTab !== 'bulk') next.delete('section');
-      if (nextTab === 'discoveries') {
-        next.delete('severity');
-        next.delete('status');
-        next.delete('discovery');
-        next.delete('client_user_id');
-      }
-      setSearchParams(next, { replace: true });
-    },
-    [searchParams, setSearchParams]
-  );
-
-  const switchTab = useCallback(
-    (tab, extras = {}) => {
-      const next = new URLSearchParams(searchParams);
-      next.set('tab', tab);
-      for (const [k, v] of Object.entries(extras)) {
-        if (v == null) next.delete(k);
-        else next.set(k, v);
-      }
-      setSearchParams(next, { replace: false });
-    },
-    [searchParams, setSearchParams]
-  );
-
-  const openDiscovery = useCallback(
-    (discoveryId) => {
-      switchTab('discoveries', { discovery: discoveryId });
-    },
-    [switchTab]
-  );
-
-  const openDiscoveriesFiltered = useCallback(
-    (filters = {}) => {
-      switchTab('discoveries', filters);
-    },
-    [switchTab]
-  );
-
-  if (!canManageOperations) {
-    return <Alert severity="info">Operations is only available to admins.</Alert>;
-  }
+function WorkspaceBody() {
+  const { view } = useOpsWorkspace();
 
   return (
-    <MainCard title="Operations">
-      <Stack spacing={2}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          {WORKSPACE_TABS.map((tab) => (
-            <Tab key={tab.value} value={tab.value} label={tab.label} icon={<tab.Icon />} iconPosition="start" />
-          ))}
-        </Tabs>
+    <Box sx={{ display: 'flex', height: 'calc(100vh - 160px)', minHeight: 480 }}>
+      <WorkspaceRail />
+      {view === 'home' && (
+        <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', p: 2 }}>
+          <Suspense fallback={<LazyFallback />}>
+            <HomeDigest />
+          </Suspense>
+        </Box>
+      )}
+      {view === 'clients' && (
+        <>
+          <ClientRoster />
+          <ClientWorkspace />
+        </>
+      )}
+      {view === 'portfolio' && (
+        <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', p: 2 }}>
+          <Suspense fallback={<LazyFallback />}>
+            <PortfolioView />
+          </Suspense>
+        </Box>
+      )}
+    </Box>
+  );
+}
 
-        <Suspense fallback={<LazyFallback />}>
-          <TabPanel activeTab={activeTab} value="command-center">
-            <CommandCenterTab onOpenDiscovery={openDiscovery} onOpenDiscoveriesFiltered={openDiscoveriesFiltered} />
-          </TabPanel>
-          <TabPanel activeTab={activeTab} value="discoveries">
-            <DiscoveriesTab onOpenDiscovery={openDiscovery} />
-          </TabPanel>
-          <TabPanel activeTab={activeTab} value="agent">
-            <ClientChat initialClientUserId={pendingClientForChat || requestedClientUserId} />
-          </TabPanel>
-          <TabPanel activeTab={activeTab} value="bulk">
-            <BulkTab />
-          </TabPanel>
-          <TabPanel activeTab={activeTab} value="content">
-            <ContentTab />
-          </TabPanel>
-        </Suspense>
-      </Stack>
+export default function Operations() {
+  return (
+    <MainCard title="Operations" content={false} sx={{ '& .MuiCardContent-root': { p: 0 } }}>
+      <OpsWorkspaceProvider>
+        <WorkspaceBody />
+      </OpsWorkspaceProvider>
     </MainCard>
   );
 }
