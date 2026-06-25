@@ -19,7 +19,7 @@ import ClientRoster from './Clients/ClientRoster';
 import ClientWorkspace from './Clients/ClientWorkspace';
 
 const HomeDigest = lazy(() => import('./home/HomeDigest'));
-const BulkTab = lazy(() => import('./Bulk/BulkTab'));
+const PortfolioView = lazy(() => import('./portfolio/PortfolioView'));
 
 function LazyFallback() {
   return (
@@ -51,7 +51,7 @@ function WorkspaceBody() {
       {view === 'portfolio' && (
         <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', p: 2 }}>
           <Suspense fallback={<LazyFallback />}>
-            <BulkTab />
+            <PortfolioView />
           </Suspense>
         </Box>
       )}
