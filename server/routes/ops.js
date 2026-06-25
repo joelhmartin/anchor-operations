@@ -48,6 +48,7 @@ import {
 import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
 import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites } from '../services/ops/blog/blogStore.js';
+import { loadClientOverview } from '../services/ops/clientOverview.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -1052,6 +1053,20 @@ router.put('/clients/:id/subscriptions', async (req, res) => {
 });
 
 // ---------------- credentials ----------------
+
+router.get('/clients/:id/overview', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+  try {
+    const overview = await loadClientOverview(req.params.id);
+    res.json(overview);
+  } catch (err) {
+    console.error('[ops] GET /clients/:id/overview failed:', err);
+    res.status(500).json({ message: 'Failed to load client overview' });
+  }
+});
 
 router.get('/clients/:id/credentials', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');

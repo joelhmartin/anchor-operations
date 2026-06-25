@@ -8,9 +8,12 @@ import DiscoveriesTab from '../Discoveries/DiscoveriesTab';
 import ContentTab from '../Content/ContentTab';
 import ClientChat from '../Chat/ClientChat';
 import ClientSitesPanel from './ClientSitesPanel';
+import ClientOverview from './ClientOverview';
 
 function SectionBody({ section, clientUserId }) {
   switch (section) {
+    case 'overview':
+      return <ClientOverview clientUserId={clientUserId} />;
     case 'findings':
       return <DiscoveriesTab activeClientId={clientUserId} onOpenDiscovery={() => {}} onOpenRun={() => {}} />;
     case 'socials':

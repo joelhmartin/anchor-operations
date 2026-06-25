@@ -73,6 +73,9 @@ export const updateClientOpsSubscriptions = (clientUserId, subscriptions) =>
 export const listClientOpsCredentials = (clientUserId) =>
   client.get(`/ops/clients/${clientUserId}/credentials`).then((res) => res.data || []);
 
+export const getClientOverview = (clientUserId) =>
+  client.get(`/ops/clients/${clientUserId}/overview`).then((r) => r.data);
+
 export const validateOpsCredential = (clientUserId, credentialId, body = {}) =>
   client.post(`/ops/clients/${clientUserId}/credentials/${credentialId}/validate`, body).then((res) => res.data);
 
