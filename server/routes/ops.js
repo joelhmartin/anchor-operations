@@ -172,10 +172,12 @@ router.post('/runs', async (req, res) => {
     const triggeredBy = trigger === 'manual' ? req.user?.id || null : null;
 
     // Phase 8 §10.3: manual triggers bypass the monthly cap (admin override)
-    // but emit an audit event so the override is auditable.
+    // but emit an audit event so the override is auditable. Pass the tier so
+    // the budget gate projects the pending run's estimated cost — the audit
+    // fires for "would land over cap" cases, not only "already at cap".
     if (trigger === 'manual') {
       try {
-        const budget = await checkBudget(client_user_id);
+        const budget = await checkBudget(client_user_id, { tier: resolvedTier });
         if (!budget.allowed) {
           await logSecurityEvent({
             userId: req.user?.id,
@@ -187,7 +189,9 @@ router.post('/runs', async (req, res) => {
               run_definition_id: run_definition_id || null,
               tier: resolvedTier,
               cap_cents: budget.capCents,
-              spend_cents: budget.spendCents
+              spend_cents: budget.spendCents,
+              estimate_cents: budget.estimateCents,
+              projected_cents: budget.spendCents + budget.estimateCents
             }
           });
         }
