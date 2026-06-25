@@ -56,6 +56,10 @@ export function OpsWorkspaceProvider({ children }) {
   const setView = useCallback((v) => patchParams({ view: v }), [patchParams]);
   const setClientUserId = useCallback((id) => patchParams({ view: 'clients', clientUserId: id, section: 'overview' }), [patchParams]);
   const setSection = useCallback((s) => patchParams({ section: s }), [patchParams]);
+  const openClientSection = useCallback(
+    (id, s) => patchParams({ view: 'clients', clientUserId: id, section: s }),
+    [patchParams]
+  );
 
   const reloadClients = useCallback(async () => {
     setClientsLoading(true);
@@ -101,10 +105,11 @@ export function OpsWorkspaceProvider({ children }) {
       view, setView,
       clientUserId, setClientUserId,
       section, setSection,
+      openClientSection,
       clients, clientsLoading, reloadClients,
       activeClient, statusByClient
     }),
-    [view, setView, clientUserId, setClientUserId, section, setSection, clients, clientsLoading, reloadClients, activeClient, statusByClient]
+    [view, setView, clientUserId, setClientUserId, section, setSection, openClientSection, clients, clientsLoading, reloadClients, activeClient, statusByClient]
   );
 
   return <OpsWorkspaceContext.Provider value={value}>{children}</OpsWorkspaceContext.Provider>;

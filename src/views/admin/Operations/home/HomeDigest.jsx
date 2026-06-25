@@ -15,7 +15,7 @@ import { clientLabel } from '../_clientLabel';
 import EmptyState from 'ui-component/extended/EmptyState';
 
 export default function HomeDigest() {
-  const { clients, setClientUserId, setSection } = useOpsWorkspace();
+  const { clients, openClientSection } = useOpsWorkspace();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -31,10 +31,7 @@ export default function HomeDigest() {
   }, []);
 
   const labelFor = (id) => clientLabel(clients.find((c) => c.id === id));
-  const openClient = (id, section) => {
-    setClientUserId(id);
-    setSection(section);
-  };
+  const openClient = openClientSection;
 
   if (loading) return <Typography color="text.secondary">Loading…</Typography>;
   if (!data) return <EmptyState title="No data" message="Couldn't load the home digest." />;

@@ -245,12 +245,14 @@ status dot (red = any open critical finding). Selecting a client navigates to
 
 **Config menu** (gear button, rendered in `ClientOpsView.jsx`):
 
-| Item | Purpose |
+All four Config menu items currently open the same shared `ClientOpsView` pane, which shows subscriptions, credential health, and recent runs together in one view. Splitting them into distinct per-section surfaces (dedicated subscription editor, run-history download, cost/cap dialog, etc.) is a planned follow-up.
+
+| Item | Current behaviour |
 |---|---|
-| Health checks | Subscription editor (run definitions + cadence) |
-| Connections | Per-client credential health |
-| Run history | Filtered run list + Re-run + report download |
-| Cost | MTD spend with cap chip + "Edit cap" dialog |
+| Health checks | Opens shared `ClientOpsView` pane |
+| Connections | Opens shared `ClientOpsView` pane |
+| Run history | Opens shared `ClientOpsView` pane |
+| Cost | Opens shared `ClientOpsView` pane |
 
 ### 9.4 Portfolio view
 
