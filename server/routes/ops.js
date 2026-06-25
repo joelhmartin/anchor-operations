@@ -1030,6 +1030,7 @@ router.get('/clients/:id/subscriptions', async (req, res) => {
 
 router.put('/clients/:id/subscriptions', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   const { subscriptions } = req.body || {};
   if (!Array.isArray(subscriptions)) {
     return res.status(400).json({ message: 'subscriptions must be an array' });
@@ -1102,6 +1103,7 @@ router.get('/clients/:id/credentials', async (req, res) => {
 
 router.put('/clients/:id/credentials/:platform', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   const platform = String(req.params.platform || '').trim();
   if (!platform) return res.status(400).json({ message: 'platform required' });
 
@@ -1128,8 +1130,16 @@ router.put('/clients/:id/credentials/:platform', async (req, res) => {
 router.delete('/clients/:id/credentials/:credentialId', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'client id');
   if (!isUuid(req.params.credentialId)) return badUuid(res, 'credential id');
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
   try {
     await deleteCredential(req.params.credentialId);
+    await logSecurityEvent({
+      userId: req.user?.id || null,
+      eventType: SecurityEventTypes.OPERATIONS_CREDENTIAL_DELETED,
+      eventCategory: SecurityEventCategories.OPERATIONS,
+      success: true,
+      details: { clientUserId: req.params.id, credentialId: req.params.credentialId }
+    });
     res.status(204).end();
   } catch (err) {
     console.error('[ops] DELETE credential failed:', err);

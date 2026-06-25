@@ -9,8 +9,9 @@ import ContentTab from '../Content/ContentTab';
 import ClientChat from '../Chat/ClientChat';
 import ClientSitesPanel from './ClientSitesPanel';
 import ClientOverview from './ClientOverview';
+import ClientOpsView from './ClientOpsView';
 
-function SectionBody({ section, clientUserId }) {
+function SectionBody({ section, clientUserId, activeClient, setSection }) {
   switch (section) {
     case 'overview':
       return <ClientOverview clientUserId={clientUserId} />;
@@ -24,6 +25,18 @@ function SectionBody({ section, clientUserId }) {
       return <ClientChat lockedClientUserId={clientUserId} />;
     case 'sites':
       return <ClientSitesPanel clientUserId={clientUserId} />;
+    case 'health':
+    case 'connections':
+    case 'runs':
+    case 'cost':
+      return (
+        <ClientOpsView
+          clientUserId={clientUserId}
+          clientName={clientLabel(activeClient)}
+          onOpenChat={() => setSection('chat')}
+          onOpenRun={() => setSection('runs')}
+        />
+      );
     default:
       return <EmptyState title="Coming up" message={`The "${section}" section renders here.`} />;
   }
@@ -71,7 +84,7 @@ export default function ClientWorkspace() {
         </Menu>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
-        <SectionBody section={section} clientUserId={activeClient.id} key={`${activeClient.id}:${section}`} />
+        <SectionBody section={section} clientUserId={activeClient.id} activeClient={activeClient} setSection={setSection} key={`${activeClient.id}:${section}`} />
       </Box>
     </Box>
   );

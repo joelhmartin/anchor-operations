@@ -90,7 +90,9 @@ export const SecurityEventTypes = {
   OPERATIONS_BULK_SCHEDULE_CREATE: 'operations.bulk_schedule_create',
   OPERATIONS_BULK_SCHEDULE_UPDATE: 'operations.bulk_schedule_update',
   OPERATIONS_BULK_SCHEDULE_DELETE: 'operations.bulk_schedule_delete',
-  OPERATIONS_BULK_SCHEDULE_RUN_NOW: 'operations.bulk_schedule_run_now'
+  OPERATIONS_BULK_SCHEDULE_RUN_NOW: 'operations.bulk_schedule_run_now',
+  // Credential management
+  OPERATIONS_CREDENTIAL_DELETED: 'operations.credential_deleted'
 };
 
 /**
