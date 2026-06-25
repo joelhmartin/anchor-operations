@@ -116,16 +116,21 @@ export async function fanoutTier(tier) {
 
   for (const s of subs) {
     try {
-      const budget = await checkBudget(s.client_user_id);
+      // Pass the run's tier so checkBudget projects spend+estimate against the
+      // cap. Previously the gate was "spend < cap" only, so a client at 499¢
+      // under a 500¢ cap could still be enqueued for a 250¢ run and land near
+      // 2× the cap with no throttle finding.
+      const budget = await checkBudget(s.client_user_id, { tier: s.tier });
       if (!budget.allowed) {
         await recordBudgetThrottle(
           s.client_user_id,
           s.run_definition_id,
           budget.capCents,
-          budget.spendCents
+          budget.spendCents,
+          budget.estimateCents
         );
         console.warn(
-          `[ops/scheduleFanout] budget throttle: client=${s.client_user_id} spend=${budget.spendCents}¢ cap=${budget.capCents}¢`
+          `[ops/scheduleFanout] budget throttle: client=${s.client_user_id} spend=${budget.spendCents}¢ est=${budget.estimateCents}¢ cap=${budget.capCents}¢`
         );
         throttled += 1;
         continue;
