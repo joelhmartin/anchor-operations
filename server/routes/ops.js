@@ -49,7 +49,7 @@ import {
 } from '../services/ops/skills/recipes.js';
 import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
-import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites, listClientKinstaBlogTargets } from '../services/ops/blog/blogStore.js';
+import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites, listClientKinstaBlogTargets, isClientKinstaEnvironment } from '../services/ops/blog/blogStore.js';
 import { loadClientOverview } from '../services/ops/clientOverview.js';
 import { loadHomeDigest } from '../services/ops/homeDigest.js';
 
@@ -1713,6 +1713,9 @@ router.post('/blog/posts', async (req, res) => {
   if (action === 'schedule') { status = 'scheduled'; scheduledFor = b.scheduled_for || null; }
   else if (action === 'publish_now') { status = 'scheduled'; scheduledFor = new Date().toISOString(); }
   if (b.kinsta_environment_id && !isUuid(b.kinsta_environment_id)) return badUuid(res, 'kinsta_environment_id');
+  if (b.kinsta_environment_id && !(await isClientKinstaEnvironment(b.client_user_id, b.kinsta_environment_id))) {
+    return res.status(404).json({ message: 'Kinsta environment not found for this client' });
+  }
   try {
     const post = await blogCreate({
       clientId: b.client_user_id, createdBy: req.user.id,

@@ -3,6 +3,27 @@ import { query } from '../../../db.js';
 import { mdToHtml } from './markdown.js';
 import { wpcli, withSftp } from '../operations-website/sshClient.js';
 
+const KNOWN_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
+
+// Derive a safe image file extension from the original filename or MIME content-type.
+// Returns a dotted extension (e.g. '.jpg') or null if unrecognisable.
+export function imageExtFor(originalName, contentType) {
+  if (originalName) {
+    const dot = originalName.lastIndexOf('.');
+    if (dot !== -1) {
+      let ext = originalName.slice(dot).toLowerCase();
+      if (ext === '.jpeg') ext = '.jpg';
+      if (KNOWN_EXTS.has(ext)) return ext;
+    }
+  }
+  if (contentType) {
+    const ext = MIME_TO_EXT[contentType.toLowerCase().split(';')[0].trim()];
+    if (ext) return ext;
+  }
+  return null;
+}
+
 // Single-quote a value for safe shell use: ' -> '\'' . Everything else stays literal.
 export function shellQuote(s) {
   return `'${String(s).replace(/'/g, "'\\''")}'`;
@@ -25,7 +46,7 @@ export function wpPublishArgs(wpPostId) {
 export async function publishViaSsh(id, post) {
   const envId = post.kinsta_environment_id;
   const htmlPath = `/tmp/ops-blog-${id}.html`;
-  const imgPath = `/tmp/ops-blog-${id}-img`;
+  let imgPathToClean = null;
   try {
     let wpPostId = post.wp_post_id ? String(post.wp_post_id) : '';
 
@@ -46,8 +67,12 @@ export async function publishViaSsh(id, post) {
     }
 
     if (post.featured_file_upload_id) {
-      const { rows } = await query(`SELECT bytes FROM file_uploads WHERE id=$1`, [post.featured_file_upload_id]);
+      const { rows } = await query(`SELECT bytes, original_name, content_type FROM file_uploads WHERE id=$1`, [post.featured_file_upload_id]);
       if (rows.length && rows[0].bytes) {
+        const ext = imageExtFor(rows[0].original_name, rows[0].content_type);
+        if (!ext) throw new Error('Featured image has no recognizable image type/extension');
+        const imgPath = `/tmp/ops-blog-${id}-img${ext}`;
+        imgPathToClean = imgPath;
         await withSftp(envId, async (sftp) => { await sftp.put(rows[0].bytes, imgPath); });
         const med = await wpcli(envId, wpMediaArgs(imgPath, wpPostId));
         if (med.exitCode !== 0) throw new Error(`wp media import failed: ${String(med.stderr || '').slice(0, 200)}`);
@@ -79,7 +104,7 @@ export async function publishViaSsh(id, post) {
     try {
       await withSftp(envId, async (sftp) => {
         await sftp.delete(htmlPath).catch(() => {});
-        await sftp.delete(imgPath).catch(() => {});
+        if (imgPathToClean) await sftp.delete(imgPathToClean).catch(() => {});
       });
     } catch { /* ignore */ }
   }

@@ -59,6 +59,21 @@ export async function listClientWpSites(clientId) {
   return rows;
 }
 
+// Verify a Kinsta environment belongs to a client (cross-tenant authz guard).
+export async function isClientKinstaEnvironment(clientId, kinstaEnvironmentId) {
+  const { rows } = await query(
+    `SELECT 1
+       FROM kinsta_environments e
+       JOIN kinsta_site_clients ksc ON ksc.site_id = e.site_id
+       JOIN kinsta_sites s ON s.id = e.site_id
+      WHERE e.id = $1 AND e.is_live = TRUE
+        AND ksc.client_user_id = $2 AND s.archived_at IS NULL
+      LIMIT 1`,
+    [kinstaEnvironmentId, clientId]
+  );
+  return rows.length > 0;
+}
+
 // A client's assigned Kinsta sites (live environment only, for blog publishing).
 export async function listClientKinstaBlogTargets(clientId) {
   const { rows } = await query(
