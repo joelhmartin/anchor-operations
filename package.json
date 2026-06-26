@@ -74,7 +74,7 @@
     "lint": "eslint \"src/**/*.{js,jsx}\"",
     "lint:fix": "eslint --fix \"src/**/*.{js,jsx}\"",
     "prettier": "prettier --write \"src/**/*.{js,jsx}\"",
-    "test:ops": "node --test \"server/services/ops/__tests__/*.test.js\""
+    "test:ops": "node --test \"server/services/ops/__tests__/*.test.js\" \"server/services/ops/agents/__tests__/*.test.js\""
   },
   "browserslist": {
     "production": [
