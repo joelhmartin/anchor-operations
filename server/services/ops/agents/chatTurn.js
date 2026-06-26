@@ -8,7 +8,7 @@
 import { providerOf, resolveChatModel } from './models.js';
 import { runClaudeChatTurn } from './claudeSupervisor.js';
 import { runGeminiChatTurn } from './geminiSupervisor.js';
-import { query } from '../../db.js';
+import { query } from '../../../db.js';
 
 /**
  * Run one chat turn, routing to the right supervisor based on provider.
