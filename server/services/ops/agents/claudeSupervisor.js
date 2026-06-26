@@ -18,8 +18,8 @@ import { getSupervisorTools, makeSupervisorRunTool, buildSystemInstruction } fro
 
 export async function createThread({ clientUserId, userId, modelId, title }) {
   const { rows } = await query(
-    `INSERT INTO ops_chat_threads (client_user_id, created_by, model_id, title)
-     VALUES ($1,$2,$3,$4) RETURNING *`,
+    `INSERT INTO ops_chat_threads (client_user_id, created_by, model_id, title, provider)
+     VALUES ($1,$2,$3,$4,'anthropic') RETURNING *`,
     [clientUserId || null, userId, resolveChatModel(modelId), title || null]
   );
   return rows[0];

@@ -4,23 +4,35 @@ import { Stack, Box, Paper, Autocomplete, TextField, Select, MenuItem, Typograph
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 import { useToast } from 'contexts/ToastContext';
-import { listOpsClients, listOpsChatThreads, getOpsChatThread, approveOpsChatAction, rejectOpsChatAction } from 'api/ops';
+import { listOpsClients, listOpsChatThreads, getOpsChatThread, approveOpsChatAction, rejectOpsChatAction, getChatModels } from 'api/ops';
 import { streamOpsChat } from 'api/opsChatStream';
 import { clientLabel } from '../_clientLabel';
 import Markdown from 'ui-component/extended/Markdown';
 import ThreadSidebar from './ThreadSidebar';
 import ApprovalDialog from './ApprovalDialog';
 
-const MODELS = [
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6 (balanced)' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5 (fast)' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8 (deep)' }
-];
-
-// Flatten persisted Anthropic content blocks into render rows.
+// Flatten persisted content blocks into render rows.
+// Handles both Anthropic shape (content_json is an array of blocks) and
+// Vertex/Gemini shape (content_json is { role, parts: [...] }).
 function rowsFromMessages(messages) {
   const rows = [];
   for (const m of messages) {
+    // ── Vertex/Gemini: content_json = { role, parts: [...] } ──────────────────
+    if (m.content && !Array.isArray(m.content) && Array.isArray(m.content.parts)) {
+      const role = m.content.role === 'model' ? 'assistant' : m.content.role;
+      for (const part of m.content.parts) {
+        if (part.text != null) {
+          rows.push({ kind: 'text', role, text: part.text });
+        } else if (part.functionCall) {
+          rows.push({ kind: 'tool_use', id: null, name: part.functionCall.name, input: part.functionCall.args, state: 'running', result: null });
+        } else if (part.functionResponse) {
+          const target = [...rows].reverse().find((r) => r.kind === 'tool_use' && r.name === part.functionResponse.name);
+          if (target) { target.result = part.functionResponse.response; target.state = 'done'; }
+        }
+      }
+      continue;
+    }
+    // ── Anthropic: content_json is an array of content blocks (or a string) ──
     const blocks = Array.isArray(m.content) ? m.content : [{ type: 'text', text: String(m.content || '') }];
     for (const b of blocks) {
       if (b.type === 'text') rows.push({ kind: 'text', role: m.role, text: b.text });
@@ -46,7 +58,8 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
   const [client, setClient] = useState(null);
   const [threads, setThreads] = useState([]);
   const [threadId, setThreadId] = useState(null);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('');
+  const [modelOptions, setModelOptions] = useState([]);
   const [rows, setRows] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,6 +72,14 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
   const scrollRef = useRef(null);
 
   useEffect(() => { listOpsClients().then(setClients).catch(() => {}); }, []);
+  useEffect(() => {
+    getChatModels()
+      .then(({ models, default: def }) => {
+        setModelOptions(models);
+        setModel((cur) => cur || def);
+      })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (initialClientUserId && clients.length) setClient(clients.find((c) => c.id === initialClientUserId) || null);
   }, [initialClientUserId, clients]);
@@ -98,11 +119,14 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
       const done = await streamOpsChat({
         clientUserId: client.id, threadId, prompt: text, modelId: model, signal: controller.signal,
         onEvent: (evt) => {
-          if (evt.type === 'text') setStreamText((s) => s + (evt.delta || ''));
-          else if (evt.type === 'thinking') setStreamThinking((s) => s + (evt.delta || ''));
-          else if (evt.type === 'tool_use') setStreamTools((t) => [...t, { name: evt.name, input: evt.input, state: 'running' }]);
+          // Field names differ by provider: Anthropic uses evt.delta; Vertex emits evt.text.
+          // Anthropic tool_use uses evt.input; Vertex emits evt.args.
+          // Anthropic cost emits evt.summary; Vertex emits flat cost fields on the event itself.
+          if (evt.type === 'text') setStreamText((s) => s + (evt.delta ?? evt.text ?? ''));
+          else if (evt.type === 'thinking') setStreamThinking((s) => s + (evt.delta ?? evt.text ?? ''));
+          else if (evt.type === 'tool_use') setStreamTools((t) => [...t, { name: evt.name, input: evt.input ?? evt.args, state: 'running' }]);
           else if (evt.type === 'tool_result') setStreamTools((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, state: 'done', result: evt.result } : x)));
-          else if (evt.type === 'cost') setCost(evt.summary);
+          else if (evt.type === 'cost') setCost(evt.summary ?? evt);
         }
       });
       // Reconcile: reload the thread so persisted blocks render canonically.
@@ -148,8 +172,23 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
               getOptionLabel={(c) => clientLabel(c)} onChange={(_, v) => { setClient(v); newChat(); }}
               renderInput={(p) => <TextField {...p} label="Client" />} />
           )}
-          <Select size="small" value={model} onChange={(e) => setModel(e.target.value)} sx={{ minWidth: 200 }}>
-            {MODELS.map((m) => <MenuItem key={m.id} value={m.id}>{m.label}</MenuItem>)}
+          <Select
+            size="small"
+            value={model}
+            onChange={(e) => {
+              const newId = e.target.value;
+              const newProvider = modelOptions.find((m) => m.id === newId)?.provider;
+              const curProvider = modelOptions.find((m) => m.id === model)?.provider;
+              if (newProvider && curProvider && newProvider !== curProvider) newChat();
+              setModel(newId);
+            }}
+            sx={{ minWidth: 220 }}
+          >
+            {modelOptions.map((m) => (
+              <MenuItem key={m.id} value={m.id}>
+                {m.provider === 'google' ? 'Google: ' : 'Claude: '}{m.label}
+              </MenuItem>
+            ))}
           </Select>
         </Stack>
 

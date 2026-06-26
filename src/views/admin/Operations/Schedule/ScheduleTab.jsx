@@ -20,7 +20,8 @@ import { useToast } from 'contexts/ToastContext';
 import {
   listOpsRunDefinitions,
   createOpsRunDefinition,
-  updateOpsRunDefinition
+  updateOpsRunDefinition,
+  getChatModels
 } from 'api/ops';
 
 const TIER_OPTIONS = [
@@ -41,7 +42,8 @@ const EMPTY_FORM = {
   tier: 'daily_essential',
   umbrellas: '',
   check_set: '[]',
-  default_for_new_clients: false
+  default_for_new_clients: false,
+  model_id: ''
 };
 
 function fmt(ts) {
@@ -61,6 +63,7 @@ export default function ScheduleTab() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [jsonError, setJsonError] = useState(null);
+  const [modelOptions, setModelOptions] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +79,17 @@ export default function ScheduleTab() {
 
   useEffect(() => {
     load();
+    getChatModels()
+      .then((data) => {
+        const opts = [{ value: '', label: 'Default (Gemini Flash)' }];
+        for (const m of data.models || []) {
+          opts.push({ value: m.id, label: m.label });
+        }
+        setModelOptions(opts);
+      })
+      .catch(() => {
+        setModelOptions([{ value: '', label: 'Default (Gemini Flash)' }]);
+      });
   }, [load]);
 
   const openCreate = () => {
@@ -92,7 +106,8 @@ export default function ScheduleTab() {
       tier: def.tier || 'daily_essential',
       umbrellas: Array.isArray(def.umbrellas) ? def.umbrellas.join(', ') : '',
       check_set: JSON.stringify(def.check_set || [], null, 2),
-      default_for_new_clients: Boolean(def.default_for_new_clients)
+      default_for_new_clients: Boolean(def.default_for_new_clients),
+      model_id: def.model_id || ''
     });
     setJsonError(null);
   };
@@ -117,7 +132,8 @@ export default function ScheduleTab() {
         .map((s) => s.trim())
         .filter(Boolean),
       check_set: parsedCheckSet,
-      default_for_new_clients: Boolean(form.default_for_new_clients)
+      default_for_new_clients: Boolean(form.default_for_new_clients),
+      model_id: form.model_id || null
     };
 
     if (!payload.name) {
@@ -257,6 +273,12 @@ export default function ScheduleTab() {
           onChange={(e) => setForm((f) => ({ ...f, tier: e.target.value }))}
           options={TIER_OPTIONS}
           required
+        />
+        <SelectField
+          label="Model override"
+          value={form.model_id}
+          onChange={(e) => setForm((f) => ({ ...f, model_id: e.target.value }))}
+          options={modelOptions}
         />
         <TextField
           label="Umbrellas (comma-separated)"

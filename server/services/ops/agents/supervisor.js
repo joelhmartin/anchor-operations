@@ -303,7 +303,7 @@ function getSupervisorTool(name) {
   return SUPERVISOR_TOOLS[name] || null;
 }
 
-function listSupervisorDeclarations() {
+export function listSupervisorDeclarations() {
   return Object.values(SUPERVISOR_TOOLS).map((t) => t.declaration);
 }
 

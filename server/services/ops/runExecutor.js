@@ -17,6 +17,7 @@ import { sanitize as sanitizePayload } from './payloadSanitizer.js';
 import { recomputeForFinding } from './attentionScore.js';
 import { runSkill } from './skills/executor.js';
 import { createSuggestion } from './skills/store.js';
+import { resolveRunModel } from './agents/models.js';
 
 // Side-effect imports: ensure all umbrella check registrations execute before
 // any run dispatch happens. New umbrellas (Phase 4 google_ads, Phase 5 meta)
@@ -206,7 +207,8 @@ async function loadRunWithDefinition(runId) {
     `
     SELECT r.*, d.check_set AS definition_check_set,
            d.umbrellas    AS definition_umbrellas,
-           d.name         AS definition_name
+           d.name         AS definition_name,
+           d.model_id     AS definition_model_id
       FROM ops_runs r
       LEFT JOIN ops_run_definitions d ON d.id = r.run_definition_id
      WHERE r.id = $1
@@ -382,11 +384,13 @@ async function executeSkillRun(run) {
   const startedAt = new Date();
 
   try {
+    const definitionModel = resolveRunModel(run.definition_model_id) || undefined;
     const out = await runSkill({
       skillId: run.skill_id,
       runId: run.id,
       clientUserId: run.client_user_id,
-      umbrellaContext: {}
+      umbrellaContext: {},
+      modelName: definitionModel
     });
 
     await persistSkillFindings(run.id, run.client_user_id, out.findings);
