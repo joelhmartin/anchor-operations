@@ -49,7 +49,7 @@ import {
 } from '../services/ops/skills/recipes.js';
 import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
-import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites } from '../services/ops/blog/blogStore.js';
+import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites, listClientKinstaBlogTargets } from '../services/ops/blog/blogStore.js';
 import { loadClientOverview } from '../services/ops/clientOverview.js';
 import { loadHomeDigest } from '../services/ops/homeDigest.js';
 
@@ -1693,8 +1693,8 @@ router.get('/checks', async (req, res) => {
 // ── Blog publishing ───────────────────────────────────────────────────────
 router.get('/blog/sites/:clientId', async (req, res) => {
   if (!isUuid(req.params.clientId)) return badUuid(res, 'clientId');
-  try { res.json({ sites: await listClientWpSites(req.params.clientId) }); }
-  catch (err) { console.error('[ops] GET /blog/sites failed:', err); res.status(500).json({ message: 'Failed to load WordPress sites' }); }
+  try { res.json({ sites: await listClientKinstaBlogTargets(req.params.clientId) }); }
+  catch (err) { console.error('[ops] GET /blog/sites failed:', err); res.status(500).json({ message: 'Failed to load sites' }); }
 });
 
 router.get('/blog/posts', async (req, res) => {
@@ -1712,10 +1712,12 @@ router.post('/blog/posts', async (req, res) => {
   let scheduledFor = null;
   if (action === 'schedule') { status = 'scheduled'; scheduledFor = b.scheduled_for || null; }
   else if (action === 'publish_now') { status = 'scheduled'; scheduledFor = new Date().toISOString(); }
+  if (b.kinsta_environment_id && !isUuid(b.kinsta_environment_id)) return badUuid(res, 'kinsta_environment_id');
   try {
     const post = await blogCreate({
       clientId: b.client_user_id, createdBy: req.user.id,
       oauthConnectionId: b.oauth_connection_id || null, siteResourceId: b.site_resource_id || null, siteUrl: b.site_url || null,
+      kinstaEnvironmentId: b.kinsta_environment_id || null,
       title: String(b.title || 'Untitled'), contentMarkdown: String(b.content_markdown || ''),
       featuredFileUploadId: b.featured_file_upload_id || null, status, scheduledFor
     });
