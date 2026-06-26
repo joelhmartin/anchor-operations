@@ -25,7 +25,7 @@ import { sendPortfolioDigest } from '../services/ops/emailDigest.js';
 import { executeApproval, rejectApproval } from '../services/ops/agents/supervisor.js';
 import { listThreads, loadThread } from '../services/ops/agents/claudeSupervisor.js';
 import { runChatTurn } from '../services/ops/agents/chatTurn.js';
-import { MODELS, DEFAULT_CHAT_MODEL } from '../services/ops/agents/models.js';
+import { MODELS, DEFAULT_CHAT_MODEL, resolveRunModel } from '../services/ops/agents/models.js';
 import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js';
 import { listAllChecks } from '../services/ops/checks/registry.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
@@ -707,7 +707,7 @@ router.get('/run-definitions', async (req, res) => {
 });
 
 router.post('/run-definitions', async (req, res) => {
-  const { name, description = null, tier, umbrellas = [], check_set = [], default_for_new_clients = false } = req.body || {};
+  const { name, description = null, tier, umbrellas = [], check_set = [], default_for_new_clients = false, model_id } = req.body || {};
 
   if (!name || !tier) {
     return res.status(400).json({ message: 'name and tier are required' });
@@ -715,16 +715,21 @@ router.post('/run-definitions', async (req, res) => {
   if (!Array.isArray(umbrellas) || !Array.isArray(check_set)) {
     return res.status(400).json({ message: 'umbrellas and check_set must be arrays' });
   }
+  if (model_id !== undefined && model_id !== null && !MODELS[model_id]) {
+    return res.status(400).json({ message: `Unknown model_id: ${model_id}` });
+  }
+
+  const resolvedModel = resolveRunModel(model_id);
 
   try {
     const { rows } = await query(
       `
       INSERT INTO ops_run_definitions
-        (name, description, tier, umbrellas, check_set, default_for_new_clients)
-      VALUES ($1, $2, $3, $4, $5, $6)
+        (name, description, tier, umbrellas, check_set, default_for_new_clients, model_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
       `,
-      [name, description, tier, umbrellas, check_set, Boolean(default_for_new_clients)]
+      [name, description, tier, umbrellas, check_set, Boolean(default_for_new_clients), resolvedModel]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -735,7 +740,7 @@ router.post('/run-definitions', async (req, res) => {
 
 router.put('/run-definitions/:id', async (req, res) => {
   if (!isUuid(req.params.id)) return badUuid(res, 'definition id');
-  const { name, description, tier, umbrellas, check_set, default_for_new_clients } = req.body || {};
+  const { name, description, tier, umbrellas, check_set, default_for_new_clients, model_id } = req.body || {};
 
   const sets = [];
   const params = [req.params.id];
@@ -758,6 +763,12 @@ router.put('/run-definitions/:id', async (req, res) => {
     addSet('check_set', check_set);
   }
   if (default_for_new_clients !== undefined) addSet('default_for_new_clients', Boolean(default_for_new_clients));
+  if (model_id !== undefined) {
+    if (model_id !== null && !MODELS[model_id]) {
+      return res.status(400).json({ message: `Unknown model_id: ${model_id}` });
+    }
+    addSet('model_id', resolveRunModel(model_id));
+  }
   sets.push(`updated_at = NOW()`);
 
   if (sets.length === 1) {

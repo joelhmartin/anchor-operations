@@ -38,7 +38,7 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_blog.sql'
 ];
 
-const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql'];
+const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql', 'migrate_ops_run_definition_model.sql'];
 
 async function runFile(file, { throwOnError = false } = {}) {
   try {

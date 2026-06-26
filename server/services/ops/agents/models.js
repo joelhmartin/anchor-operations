@@ -32,3 +32,9 @@ export function resolveChatModel(modelId) {
 export function priceFor(modelId) {
   return MODELS[modelId] || MODELS[DEFAULT_CHAT_MODEL] || MODELS['gemini-2.5-flash'];
 }
+
+// Validate a run-definition model override. Returns the model id if it exists
+// in the registry, or null. null → caller falls back to the vertex DEFAULT_MODEL.
+export function resolveRunModel(modelId) {
+  return modelId && MODELS[modelId] ? modelId : null;
+}

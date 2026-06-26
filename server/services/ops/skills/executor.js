@@ -162,7 +162,7 @@ function parseSuggestions(rawSuggestions) {
  *   suggestions: Array
  * }>}
  */
-export async function runSkill({ skillId, runId, clientUserId, umbrellaContext = {} }) {
+export async function runSkill({ skillId, runId, clientUserId, umbrellaContext = {}, modelName }) {
   const skill = await getSkill(skillId);
   if (!skill) throw new Error(`skill not found: ${skillId}`);
   if (skill.archived_at) throw new Error(`skill archived: ${skill.slug}`);
@@ -234,7 +234,7 @@ export async function runSkill({ skillId, runId, clientUserId, umbrellaContext =
     userId: null,   // skills run headlessly; no human userId in scope
     costTracker,
     budgetCents: skill.cost_estimate_cents > 0 ? skill.cost_estimate_cents : undefined,
-    modelName: skill.model || undefined  // null/undefined → vertexRuntime default
+    modelName: modelName || skill.model || undefined  // definition override → skill model → vertexRuntime default
   });
 
   const parsed = parseAgentOutput(loopResult.text);
