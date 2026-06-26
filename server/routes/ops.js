@@ -23,7 +23,8 @@ import { handleFanoutRequest, authorizeFanoutRequest, fanOutBulkSchedule, comput
 import { getReportSignedUrl } from '../services/ops/reportRenderer.js';
 import { sendPortfolioDigest } from '../services/ops/emailDigest.js';
 import { executeApproval, rejectApproval } from '../services/ops/agents/supervisor.js';
-import { runClaudeChatTurn, listThreads, loadThread } from '../services/ops/agents/claudeSupervisor.js';
+import { listThreads, loadThread } from '../services/ops/agents/claudeSupervisor.js';
+import { runChatTurn } from '../services/ops/agents/chatTurn.js';
 import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js';
 import { listAllChecks } from '../services/ops/checks/registry.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
@@ -1379,7 +1380,7 @@ router.post('/chat', chatRateLimit('operations_assistant_user'), async (req, res
   req.on('close', () => { /* client aborted; loop finishes its current hop then no-op */ });
 
   try {
-    const result = await runClaudeChatTurn({
+    const result = await runChatTurn({
       clientUserId: client_user_id || null,
       userId: req.user.id,
       threadId: thread_id,

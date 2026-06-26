@@ -34,6 +34,7 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_skills_and_bulk.sql',
   'migrate_social_publishing.sql',
   'migrate_ops_chat.sql',
+  'migrate_ops_chat_provider.sql',
   'migrate_ops_blog.sql'
 ];
 

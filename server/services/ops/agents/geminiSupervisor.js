@@ -85,12 +85,10 @@ export async function runGeminiChatTurn({
     );
     priorMessages = mRows;
   } else {
-    // NOTE: omits `provider` column — add once Task 4 migration (ALTER TABLE
-    // ops_chat_threads ADD COLUMN provider TEXT) has been applied.
     const newModel = resolveChatModel(modelId);
     const { rows } = await query(
-      `INSERT INTO ops_chat_threads (client_user_id, created_by, model_id, title)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
+      `INSERT INTO ops_chat_threads (client_user_id, created_by, model_id, title, provider)
+       VALUES ($1,$2,$3,$4,'google') RETURNING *`,
       [clientUserId || null, userId, newModel, String(prompt || '').slice(0, 60) || null]
     );
     thread = rows[0];
