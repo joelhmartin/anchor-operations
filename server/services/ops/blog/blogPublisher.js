@@ -2,6 +2,7 @@
 import { query, getClient } from '../../../db.js';
 import { resolveWpConnection, wpCreatePost, wpUploadMedia } from './wpClient.js';
 import { mdToHtml } from './markdown.js';
+import { publishViaSsh } from './sshPublisher.js';
 
 const FETCH_SQL = `SELECT * FROM ops_blog_posts WHERE id = $1 AND status = 'publishing'`;
 const CLAIM_SQL = `UPDATE ops_blog_posts SET status='publishing', updated_at=NOW()
@@ -20,6 +21,9 @@ export async function publishBlogPost(id, options = {}) {
     post = rows[0];
   }
   try {
+    if (post.kinsta_environment_id) {
+      return publishViaSsh(id, post);
+    }
     if (!post.oauth_connection_id) throw new Error('No WordPress connection selected');
     const { auth, siteUrl } = await resolveWpConnection(post.oauth_connection_id);
     const target = post.site_url || siteUrl;

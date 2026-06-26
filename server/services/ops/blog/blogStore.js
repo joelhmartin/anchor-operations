@@ -1,18 +1,18 @@
 // server/services/ops/blog/blogStore.js
 import { query } from '../../../db.js';
 
-export async function createPost({ clientId, createdBy, oauthConnectionId, siteResourceId, siteUrl, title, contentMarkdown, featuredFileUploadId, status, scheduledFor }) {
+export async function createPost({ clientId, createdBy, oauthConnectionId, siteResourceId, siteUrl, kinstaEnvironmentId, title, contentMarkdown, featuredFileUploadId, status, scheduledFor }) {
   const { rows } = await query(
     `INSERT INTO ops_blog_posts
-      (client_id, created_by, oauth_connection_id, site_resource_id, site_url, title, content_markdown, featured_file_upload_id, status, scheduled_for)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [clientId, createdBy, oauthConnectionId || null, siteResourceId || null, siteUrl || null, title, contentMarkdown || '', featuredFileUploadId || null, status || 'draft', scheduledFor || null]
+      (client_id, created_by, oauth_connection_id, site_resource_id, site_url, kinsta_environment_id, title, content_markdown, featured_file_upload_id, status, scheduled_for)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [clientId, createdBy, oauthConnectionId || null, siteResourceId || null, siteUrl || null, kinstaEnvironmentId || null, title, contentMarkdown || '', featuredFileUploadId || null, status || 'draft', scheduledFor || null]
   );
   return rows[0];
 }
 
 export async function updatePost(id, fields) {
-  const allowed = ['title', 'content_markdown', 'oauth_connection_id', 'site_resource_id', 'site_url', 'featured_file_upload_id', 'status', 'scheduled_for'];
+  const allowed = ['title', 'content_markdown', 'oauth_connection_id', 'site_resource_id', 'site_url', 'kinsta_environment_id', 'featured_file_upload_id', 'status', 'scheduled_for'];
   const sets = []; const vals = []; let i = 1;
   for (const k of allowed) { if (k in fields) { sets.push(`${k} = $${i++}`); vals.push(fields[k]); } }
   if (!sets.length) return getPost(id);
@@ -54,6 +54,38 @@ export async function listClientWpSites(clientId) {
       WHERE r.client_id = $1 AND r.provider = 'wordpress' AND r.resource_type = 'wordpress_site'
         AND oc.provider = 'wordpress'
       ORDER BY r.is_primary DESC NULLS LAST, r.resource_name ASC`,
+    [clientId]
+  );
+  return rows;
+}
+
+// Verify a Kinsta environment belongs to a client (cross-tenant authz guard).
+export async function isClientKinstaEnvironment(clientId, kinstaEnvironmentId) {
+  const { rows } = await query(
+    `SELECT 1
+       FROM kinsta_environments e
+       JOIN kinsta_site_clients ksc ON ksc.site_id = e.site_id
+       JOIN kinsta_sites s ON s.id = e.site_id
+      WHERE e.id = $1 AND e.is_live = TRUE
+        AND ksc.client_user_id = $2 AND s.archived_at IS NULL
+      LIMIT 1`,
+    [kinstaEnvironmentId, clientId]
+  );
+  return rows.length > 0;
+}
+
+// A client's assigned Kinsta sites (live environment only, for blog publishing).
+export async function listClientKinstaBlogTargets(clientId) {
+  const { rows } = await query(
+    `SELECT s.id AS site_id,
+            e.id AS kinsta_environment_id,
+            COALESCE(NULLIF(s.display_name, ''), s.site_name) AS label,
+            e.primary_domain
+       FROM kinsta_site_clients ksc
+       JOIN kinsta_sites s ON s.id = ksc.site_id
+       JOIN kinsta_environments e ON e.site_id = s.id AND e.is_live = TRUE
+      WHERE ksc.client_user_id = $1 AND s.archived_at IS NULL
+      ORDER BY label ASC`,
     [clientId]
   );
   return rows;
