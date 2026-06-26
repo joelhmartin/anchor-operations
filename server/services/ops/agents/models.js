@@ -25,3 +25,10 @@ export function resolveChatModel(modelId) {
   if (modelId && MODELS[modelId]) return modelId;
   return MODELS[DEFAULT_CHAT_MODEL] ? DEFAULT_CHAT_MODEL : 'gemini-2.5-flash';
 }
+
+// Pricing lookup across providers. Falls back to the default model's rates for
+// unknown ids. Returns the model entry (has inPer1k/outPer1k, consumed by the
+// runtime cost meters).
+export function priceFor(modelId) {
+  return MODELS[modelId] || MODELS[DEFAULT_CHAT_MODEL] || MODELS['gemini-2.5-flash'];
+}
