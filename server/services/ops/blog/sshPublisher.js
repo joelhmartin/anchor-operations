@@ -33,6 +33,7 @@ export async function publishViaSsh(id, post) {
       const html = mdToHtml(post.content_markdown);
       await withSftp(envId, async (sftp) => { await sftp.put(Buffer.from(html, 'utf8'), htmlPath); });
       const out = await wpcli(envId, wpCreateArgs(htmlPath, post.title));
+      if (out.exitCode !== 0) throw new Error(`wp post create failed: ${String(out.stderr || '').slice(0, 200)}`);
       wpPostId = String(out.stdout || '').trim();
       if (!wpPostId) throw new Error(`wp post create returned no id: ${String(out.stderr || '').slice(0, 200)}`);
       await query(`UPDATE ops_blog_posts SET wp_post_id=$2, updated_at=NOW() WHERE id=$1`, [id, wpPostId]);
@@ -48,11 +49,13 @@ export async function publishViaSsh(id, post) {
       const { rows } = await query(`SELECT bytes FROM file_uploads WHERE id=$1`, [post.featured_file_upload_id]);
       if (rows.length && rows[0].bytes) {
         await withSftp(envId, async (sftp) => { await sftp.put(rows[0].bytes, imgPath); });
-        await wpcli(envId, wpMediaArgs(imgPath, wpPostId));
+        const med = await wpcli(envId, wpMediaArgs(imgPath, wpPostId));
+        if (med.exitCode !== 0) throw new Error(`wp media import failed: ${String(med.stderr || '').slice(0, 200)}`);
       }
     }
 
-    await wpcli(envId, wpPublishArgs(wpPostId));
+    const pub = await wpcli(envId, wpPublishArgs(wpPostId));
+    if (pub.exitCode !== 0) throw new Error(`wp publish failed: ${String(pub.stderr || '').slice(0, 200)}`);
 
     let url = null;
     try {
