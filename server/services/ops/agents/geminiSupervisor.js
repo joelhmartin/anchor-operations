@@ -135,6 +135,16 @@ export async function runGeminiChatTurn({
   // (that's the Anthropic-runtime signal); instead it captures the approval id
   // in the closure and emits 'approval_required' so the UI can render the card.
   const runTool = async (name, args) => {
+    // Match Claude's approval semantics. runClaudeToolLoop hard-stops the loop
+    // the moment a proposal fires, so no sub-agent can run after propose_action.
+    // runToolLoopStream keeps looping, so close the one mutation-widening path:
+    // once a proposal is pending, block delegate_to (spawns a sub-agent). Read-
+    // only tools (load_run, drill_into) and further propose_action calls may
+    // still proceed. This guard sits at the TOP so it applies on the hop AFTER
+    // a proposal fired.
+    if (lastPendingApprovalId && name === 'delegate_to') {
+      return { error: 'A proposal is pending approval; no further delegate_to calls are allowed this turn.' };
+    }
     const handler = toolHandlerMap[name];
     if (!handler) return { error: `Unknown tool: ${name}` };
     const result = await handler({ args, ctx: toolCtx, costTracker });
@@ -159,6 +169,12 @@ export async function runGeminiChatTurn({
     onEvent
   });
 
+  // ── Resolve status ────────────────────────────────────────────────────────
+  // If propose_action fired during this turn the conversation is paused for
+  // admin approval; otherwise the turn is complete. Computed before persistence
+  // so the usage_json gate can mirror the Claude path's `out.status === 'final'`.
+  const status = lastPendingApprovalId ? 'awaiting_approval' : 'final';
+
   // ── Persist every message produced this turn ──────────────────────────────
   // out.messages is the convo copy; slice from `before` to get new turns only.
   // The user message was already persisted above.
@@ -177,7 +193,10 @@ export async function runGeminiChatTurn({
         thread.id,
         m.role,
         JSON.stringify(m),          // full Vertex Content object { role, parts }
-        isLast ? JSON.stringify(costTracker.summary()) : null,
+        // Mirror claudeSupervisor: usage_json only on the last message when the
+        // turn is final (null on awaiting_approval); cost_cents on the last
+        // message regardless of status.
+        isLast && status === 'final' ? JSON.stringify(costTracker.summary()) : null,
         isLast ? costTracker.summary().total_cents : 0
       ]
     );
@@ -189,11 +208,6 @@ export async function runGeminiChatTurn({
     `UPDATE ops_chat_threads SET updated_at = NOW(), model_id = $2 WHERE id = $1`,
     [thread.id, chosenModel]
   );
-
-  // ── Resolve status ────────────────────────────────────────────────────────
-  // If propose_action fired during this turn the conversation is paused for
-  // admin approval; otherwise the turn is complete.
-  const status = lastPendingApprovalId ? 'awaiting_approval' : 'final';
 
   onEvent({
     type: 'done',
