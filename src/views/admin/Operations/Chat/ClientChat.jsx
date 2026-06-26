@@ -11,10 +11,28 @@ import Markdown from 'ui-component/extended/Markdown';
 import ThreadSidebar from './ThreadSidebar';
 import ApprovalDialog from './ApprovalDialog';
 
-// Flatten persisted Anthropic content blocks into render rows.
+// Flatten persisted content blocks into render rows.
+// Handles both Anthropic shape (content_json is an array of blocks) and
+// Vertex/Gemini shape (content_json is { role, parts: [...] }).
 function rowsFromMessages(messages) {
   const rows = [];
   for (const m of messages) {
+    // ── Vertex/Gemini: content_json = { role, parts: [...] } ──────────────────
+    if (m.content && !Array.isArray(m.content) && Array.isArray(m.content.parts)) {
+      const role = m.content.role === 'model' ? 'assistant' : m.content.role;
+      for (const part of m.content.parts) {
+        if (part.text != null) {
+          rows.push({ kind: 'text', role, text: part.text });
+        } else if (part.functionCall) {
+          rows.push({ kind: 'tool_use', id: null, name: part.functionCall.name, input: part.functionCall.args, state: 'running', result: null });
+        } else if (part.functionResponse) {
+          const target = [...rows].reverse().find((r) => r.kind === 'tool_use' && r.name === part.functionResponse.name);
+          if (target) { target.result = part.functionResponse.response; target.state = 'done'; }
+        }
+      }
+      continue;
+    }
+    // ── Anthropic: content_json is an array of content blocks (or a string) ──
     const blocks = Array.isArray(m.content) ? m.content : [{ type: 'text', text: String(m.content || '') }];
     for (const b of blocks) {
       if (b.type === 'text') rows.push({ kind: 'text', role: m.role, text: b.text });
@@ -101,11 +119,14 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
       const done = await streamOpsChat({
         clientUserId: client.id, threadId, prompt: text, modelId: model, signal: controller.signal,
         onEvent: (evt) => {
-          if (evt.type === 'text') setStreamText((s) => s + (evt.delta || ''));
-          else if (evt.type === 'thinking') setStreamThinking((s) => s + (evt.delta || ''));
-          else if (evt.type === 'tool_use') setStreamTools((t) => [...t, { name: evt.name, input: evt.input, state: 'running' }]);
+          // Field names differ by provider: Anthropic uses evt.delta; Vertex emits evt.text.
+          // Anthropic tool_use uses evt.input; Vertex emits evt.args.
+          // Anthropic cost emits evt.summary; Vertex emits flat cost fields on the event itself.
+          if (evt.type === 'text') setStreamText((s) => s + (evt.delta ?? evt.text ?? ''));
+          else if (evt.type === 'thinking') setStreamThinking((s) => s + (evt.delta ?? evt.text ?? ''));
+          else if (evt.type === 'tool_use') setStreamTools((t) => [...t, { name: evt.name, input: evt.input ?? evt.args, state: 'running' }]);
           else if (evt.type === 'tool_result') setStreamTools((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, state: 'done', result: evt.result } : x)));
-          else if (evt.type === 'cost') setCost(evt.summary);
+          else if (evt.type === 'cost') setCost(evt.summary ?? evt);
         }
       });
       // Reconcile: reload the thread so persisted blocks render canonically.

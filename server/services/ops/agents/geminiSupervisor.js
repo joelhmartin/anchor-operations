@@ -17,10 +17,9 @@
 //            The user-visible behaviour (approval card, no execution) is
 //            identical.
 //
-// Task-4 ordering note:
-//   ops_chat_threads.provider column is added by Task 4's migration. The INSERT
-//   below omits `provider` so the code is deployable before Task 4 lands. Once
-//   Task 4 merges, add `provider = 'google'` to the INSERT column list.
+// Task-4 note:
+//   ops_chat_threads.provider column was added by Task 4's migration. The INSERT
+//   already includes `provider = 'google'`.
 
 import { query } from '../../../db.js';
 import { createCostTracker } from '../costTracker.js';
@@ -57,7 +56,9 @@ function historyToMessages(rows) {
  * @param {string}  [p.modelId]        Optional model override (must be a Google/Vertex model)
  * @param {Function} [p.onEvent]       Progress callback ({ type, ... })
  *                                     Emits: text | tool_use | tool_result | cost |
- *                                            approval_required | done
+ *                                            approval_required
+ *                                     (done is NOT emitted here — the route emits the
+ *                                      authoritative done frame with pendingApproval detail)
  * @returns {Promise<{ threadId, status, text, pendingApprovalId, costSummary, assistantMessageId }>}
  */
 export async function runGeminiChatTurn({
@@ -207,13 +208,10 @@ export async function runGeminiChatTurn({
     [thread.id, chosenModel]
   );
 
-  onEvent({
-    type: 'done',
-    threadId: thread.id,
-    status,
-    assistantMessageId: lastAssistantId,
-    costSummary: costTracker.summary()
-  });
+  // NOTE: we do NOT emit onEvent({ type: 'done' }) here. The route (ops.js) emits
+  // the authoritative 'done' frame after enriching pendingApproval from the DB.
+  // claudeSupervisor follows the same convention; emitting here would send two 'done'
+  // frames on the Gemini path, causing the UI to reconcile the thread twice.
 
   // Return shape matches runClaudeChatTurn exactly.
   return {
