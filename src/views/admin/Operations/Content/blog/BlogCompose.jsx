@@ -17,10 +17,10 @@ export default function BlogCompose({ client, onCreated }) {
 
   useEffect(() => {
     setSites([]); setSite('');
-    if (client?.id) listClientWpSites(client.id).then((s) => { setSites(s); if (s[0]) setSite(s[0].site_resource_id); }).catch(() => {});
+    if (client?.id) listClientWpSites(client.id).then((s) => { setSites(s); if (s[0]) setSite(s[0].kinsta_environment_id); }).catch(() => {});
   }, [client]);
 
-  const chosen = sites.find((s) => s.site_resource_id === site) || null;
+  const chosen = sites.find((s) => s.kinsta_environment_id === site) || {};
 
   const onPickImage = async (e) => {
     const f = e.target.files?.[0];
@@ -30,13 +30,13 @@ export default function BlogCompose({ client, onCreated }) {
 
   const submit = async (action) => {
     if (!client) { toast.warning('Pick a client'); return; }
-    if (!chosen) { toast.warning('Pick a WordPress site'); return; }
+    if (!chosen.kinsta_environment_id) { toast.warning('Pick a Kinsta site'); return; }
     if (!title.trim()) { toast.warning('Title required'); return; }
     setBusy(true);
     try {
       await createBlogPost({
         client_user_id: client.id, action,
-        oauth_connection_id: chosen.oauth_connection_id, site_resource_id: chosen.site_resource_id, site_url: chosen.site_url,
+        kinsta_environment_id: chosen.kinsta_environment_id || site,
         title, content_markdown: md, featured_file_upload_id: featured?.id || null,
         scheduled_for: action === 'schedule' ? (when ? new Date(when).toISOString() : null) : null
       });
@@ -50,8 +50,15 @@ export default function BlogCompose({ client, onCreated }) {
   return (
     <Stack spacing={1.5}>
       <Select size="small" value={site} onChange={(e) => setSite(e.target.value)} displayEmpty>
-        <MenuItem value="" disabled>{sites.length ? 'Select WordPress site' : 'No WordPress sites for this client'}</MenuItem>
-        {sites.map((s) => <MenuItem key={s.site_resource_id} value={s.site_resource_id}>{s.site_name || s.site_url}</MenuItem>)}
+        <MenuItem value="" disabled>{sites.length ? 'Select Kinsta site' : 'No Kinsta site with a live environment is assigned — assign one in the Sites tab'}</MenuItem>
+        {sites.map((s) => (
+          <MenuItem key={s.kinsta_environment_id} value={s.kinsta_environment_id}>
+            <Stack>
+              <span>{s.label}</span>
+              {s.primary_domain && <Typography variant="caption" color="text.secondary">{s.primary_domain}</Typography>}
+            </Stack>
+          </MenuItem>
+        ))}
       </Select>
       <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
       <Stack direction="row" spacing={2}>
