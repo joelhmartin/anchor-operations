@@ -100,3 +100,5 @@ export const listOpsChatThreads = (clientUserId) =>
 
 export const getOpsChatThread = (threadId) =>
   client.get(`/ops/chat/threads/${threadId}`).then((res) => res.data);
+
+export const getChatModels = () => client.get('/ops/chat/models').then((r) => r.data);

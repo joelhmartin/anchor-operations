@@ -4,18 +4,12 @@ import { Stack, Box, Paper, Autocomplete, TextField, Select, MenuItem, Typograph
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 import { useToast } from 'contexts/ToastContext';
-import { listOpsClients, listOpsChatThreads, getOpsChatThread, approveOpsChatAction, rejectOpsChatAction } from 'api/ops';
+import { listOpsClients, listOpsChatThreads, getOpsChatThread, approveOpsChatAction, rejectOpsChatAction, getChatModels } from 'api/ops';
 import { streamOpsChat } from 'api/opsChatStream';
 import { clientLabel } from '../_clientLabel';
 import Markdown from 'ui-component/extended/Markdown';
 import ThreadSidebar from './ThreadSidebar';
 import ApprovalDialog from './ApprovalDialog';
-
-const MODELS = [
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6 (balanced)' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5 (fast)' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8 (deep)' }
-];
 
 // Flatten persisted Anthropic content blocks into render rows.
 function rowsFromMessages(messages) {
@@ -46,7 +40,8 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
   const [client, setClient] = useState(null);
   const [threads, setThreads] = useState([]);
   const [threadId, setThreadId] = useState(null);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('');
+  const [modelOptions, setModelOptions] = useState([]);
   const [rows, setRows] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,6 +54,14 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
   const scrollRef = useRef(null);
 
   useEffect(() => { listOpsClients().then(setClients).catch(() => {}); }, []);
+  useEffect(() => {
+    getChatModels()
+      .then(({ models, default: def }) => {
+        setModelOptions(models);
+        setModel((cur) => cur || def);
+      })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (initialClientUserId && clients.length) setClient(clients.find((c) => c.id === initialClientUserId) || null);
   }, [initialClientUserId, clients]);
@@ -148,8 +151,23 @@ export default function ClientChat({ initialClientUserId, lockedClientUserId }) 
               getOptionLabel={(c) => clientLabel(c)} onChange={(_, v) => { setClient(v); newChat(); }}
               renderInput={(p) => <TextField {...p} label="Client" />} />
           )}
-          <Select size="small" value={model} onChange={(e) => setModel(e.target.value)} sx={{ minWidth: 200 }}>
-            {MODELS.map((m) => <MenuItem key={m.id} value={m.id}>{m.label}</MenuItem>)}
+          <Select
+            size="small"
+            value={model}
+            onChange={(e) => {
+              const newId = e.target.value;
+              const newProvider = modelOptions.find((m) => m.id === newId)?.provider;
+              const curProvider = modelOptions.find((m) => m.id === model)?.provider;
+              if (newProvider && curProvider && newProvider !== curProvider) newChat();
+              setModel(newId);
+            }}
+            sx={{ minWidth: 220 }}
+          >
+            {modelOptions.map((m) => (
+              <MenuItem key={m.id} value={m.id}>
+                {m.provider === 'google' ? 'Google: ' : 'Claude: '}{m.label}
+              </MenuItem>
+            ))}
           </Select>
         </Stack>
 

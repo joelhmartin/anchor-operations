@@ -25,6 +25,7 @@ import { sendPortfolioDigest } from '../services/ops/emailDigest.js';
 import { executeApproval, rejectApproval } from '../services/ops/agents/supervisor.js';
 import { listThreads, loadThread } from '../services/ops/agents/claudeSupervisor.js';
 import { runChatTurn } from '../services/ops/agents/chatTurn.js';
+import { MODELS, DEFAULT_CHAT_MODEL } from '../services/ops/agents/models.js';
 import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js';
 import { listAllChecks } from '../services/ops/checks/registry.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
@@ -1340,6 +1341,11 @@ router.put('/clients/:clientUserId/cap', async (req, res) => {
 });
 
 // ---------------- AI chat (Phase 7 — supervisor + sub-agents) ----------------
+
+router.get('/chat/models', (_req, res) => {
+  const models = Object.entries(MODELS).map(([id, m]) => ({ id, label: m.label, provider: m.provider }));
+  res.json({ models, default: DEFAULT_CHAT_MODEL });
+});
 
 function chatRateLimit(limitType) {
   return async (req, res, next) => {
