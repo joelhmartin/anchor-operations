@@ -38,6 +38,12 @@ export async function publishViaSsh(id, post) {
       await query(`UPDATE ops_blog_posts SET wp_post_id=$2, updated_at=NOW() WHERE id=$1`, [id, wpPostId]);
     }
 
+    // Invariant: wp_post_id must be a bare integer before it's reused (unquoted) in
+    // downstream WP-CLI commands. Covers both the fresh-create and resume paths.
+    if (!/^\d+$/.test(wpPostId)) {
+      throw new Error(`unexpected wp post id from create: ${String(wpPostId).slice(0, 50)}`);
+    }
+
     if (post.featured_file_upload_id) {
       const { rows } = await query(`SELECT bytes FROM file_uploads WHERE id=$1`, [post.featured_file_upload_id]);
       if (rows.length && rows[0].bytes) {
