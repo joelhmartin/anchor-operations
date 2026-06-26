@@ -200,6 +200,136 @@ export async function runToolLoop({
 }
 
 /**
+ * Streaming variant of runToolLoop for the Gemini chat path.
+ *
+ * Mirrors runToolLoop exactly for cost accounting, budget guard, safety
+ * thresholds, and message format — only the model call changes to
+ * generateContentStream so the caller can receive token deltas via onEvent.
+ *
+ * @param {Object}   p
+ * @param {string}   [p.modelName]
+ * @param {Array}    p.messages           Vertex Content[] (not mutated — convo copy is returned)
+ * @param {Object}   p.systemInstruction  { role:'system', parts:[{ text }] }
+ * @param {Array}    p.toolDeclarations   Vertex function declarations
+ * @param {Function} p.runTool            async (name, args) => result
+ * @param {Object}   p.costTracker        Phase 2 cost tracker (createCostTracker())
+ * @param {number}   [p.maxHops]          Default MAX_TOOL_HOPS
+ * @param {number}   [p.budgetCents]      Default PER_TURN_BUDGET_CENTS
+ * @param {Function} [p.onEvent]          ({ type, ... }) → void. Defaults to no-op.
+ *                                        type='text'        → { text }  (delta)
+ *                                        type='tool_use'    → { id, name, args }
+ *                                        type='tool_result' → { id, result }
+ *                                        type='cost'        → { promptTokens, completionTokens, dollars, source }
+ * @param {Object}   [p.__modelForTest]   Injected fake model for unit tests (skips Vertex init)
+ * @returns {Promise<{ text, messages, usage }>}
+ */
+export async function runToolLoopStream({
+  modelName = DEFAULT_MODEL,
+  messages,
+  systemInstruction,
+  toolDeclarations,
+  runTool,
+  costTracker,
+  maxHops = MAX_TOOL_HOPS,
+  budgetCents = PER_TURN_BUDGET_CENTS,
+  onEvent = () => {},
+  __modelForTest = null
+}) {
+  const model = __modelForTest || getModel({ modelName, toolDeclarations });
+  const convo = [...messages];
+  let finalText = '';
+
+  for (let hop = 0; hop < maxHops; hop += 1) {
+    // Budget guard — mirrors runToolLoop's costTracker.totalCents() check
+    if (costTracker?.totalCents?.() >= budgetCents) {
+      return {
+        text: "I've hit my per-turn budget — please ask a more focused question or split this into multiple turns.",
+        messages: convo,
+        usage: {}
+      };
+    }
+
+    let stream, response;
+    try {
+      ({ stream, response } = await model.generateContentStream({
+        contents: convo,
+        systemInstruction,
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
+        safetySettings: SAFETY_SETTINGS
+      }));
+    } catch (err) {
+      return { text: `Model call failed: ${err.message || err}`, messages: convo, usage: {} };
+    }
+
+    // Emit text deltas from the stream as they arrive
+    for await (const chunk of stream) {
+      const chunkParts = chunk?.candidates?.[0]?.content?.parts || [];
+      for (const p of chunkParts) {
+        if (typeof p.text === 'string' && p.text) {
+          onEvent({ type: 'text', text: p.text });
+        }
+      }
+    }
+
+    // Await the authoritative full response — functionCalls live here
+    const full = await response;
+    const parts = full?.candidates?.[0]?.content?.parts || [];
+
+    // Cost accounting — mirrors runToolLoop's costTracker.add(...) shape exactly
+    const usage = readUsage(full);
+    if (costTracker?.add) {
+      costTracker.add({
+        tokens: (usage.promptTokens || 0) + (usage.completionTokens || 0),
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        dollars: tokensToDollars(usage),
+        source: `vertex:${modelName}`
+      });
+    }
+    onEvent({
+      type: 'cost',
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      dollars: tokensToDollars(usage),
+      source: `vertex:${modelName}`
+    });
+
+    if (!parts.length) {
+      return { text: finalText, messages: convo, usage: {} };
+    }
+
+    // Record the model turn — mirrors runToolLoop's { role:'model', parts }
+    convo.push({ role: 'model', parts });
+
+    // Collect all functionCalls from the authoritative full response
+    const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall);
+
+    if (!calls.length) {
+      finalText = parts.map((p) => p.text || '').join('').trim();
+      break;
+    }
+
+    // Run each tool and collect responses — mirrors runToolLoop's role:'tool' message
+    const responseParts = [];
+    for (const call of calls) {
+      onEvent({ type: 'tool_use', id: `${call.name}-${hop}`, name: call.name, args: call.args || {} });
+      let result;
+      try {
+        result = await runTool(call.name, call.args || {});
+      } catch (err) {
+        result = { error: String(err?.message || err) };
+      }
+      onEvent({ type: 'tool_result', id: `${call.name}-${hop}`, result });
+      responseParts.push({ functionResponse: { name: call.name, response: result } });
+    }
+    // role:'tool' mirrors how runToolLoop appends function responses
+    convo.push({ role: 'tool', parts: responseParts });
+  }
+
+  return { text: finalText, messages: convo, usage: {} };
+}
+
+/**
  * Liveness probe for the Ops supervisor's Vertex path. Minimal generation,
  * no tools, no cost tracker. Returns { ok, model }. Throws on transport/auth/model error.
  */
