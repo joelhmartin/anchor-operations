@@ -66,3 +66,12 @@ test('setConnectionStatus rejects an illegal transition (DB)', async () => {
     /illegal status transition/i
   );
 });
+
+test('upsert rejects illegal status transition on existing row (DB)', async () => {
+  const clientUserId = randomUUID();
+  await upsertConnection({ clientUserId, serviceCategory: 'cms', provider: 'wordpress', status: 'missing' });
+  await assert.rejects(
+    () => upsertConnection({ clientUserId, serviceCategory: 'cms', provider: 'wordpress', status: 'verified' }),
+    /illegal status transition/i
+  );
+});

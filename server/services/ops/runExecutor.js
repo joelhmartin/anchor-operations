@@ -51,7 +51,13 @@ function tierBudget(tier) {
 function gateCheck(def, connections) {
   const required = Array.isArray(def?.requiredCapabilities) ? def.requiredCapabilities : [];
   if (required.length === 0) return { skip: false };
-  const { satisfied, missing } = evaluateGate(required, connections);
+  // Scope to the check's own provider so a `read` cap on cms/wordpress cannot
+  // satisfy a gate declared by an analytics/ga4 check (or any other category/provider).
+  // Fall back to all connections only when the check has no explicit classification.
+  const scoped = (def.serviceCategory && def.provider)
+    ? connections.filter(c => c.service_category === def.serviceCategory && c.provider === def.provider)
+    : connections;
+  const { satisfied, missing } = evaluateGate(required, scoped);
   if (satisfied) return { skip: false };
   return { skip: true, reason: 'capability_gate', missing };
 }

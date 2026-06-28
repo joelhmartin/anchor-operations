@@ -26,3 +26,29 @@ test('gated check with no connections at all skips (never errors)', () => {
   assert.equal(r.skip, true);
   assert.deepEqual(r.missing, ['read']);
 });
+
+// Provider-scoping: a cap on a different provider must NOT satisfy the gate.
+test('gated check does not accept capabilities from a different provider', () => {
+  const wrongConn = { status: 'verified', capabilities: ['read'], service_category: 'analytics', provider: 'ga4' };
+  const r = gateCheck(
+    { requiredCapabilities: ['read'], serviceCategory: 'cms', provider: 'wordpress' },
+    [wrongConn]
+  );
+  assert.equal(r.skip, true);
+  assert.deepEqual(r.missing, ['read']);
+});
+
+test('gated check is satisfied by the correct provider connection', () => {
+  const rightConn = { status: 'verified', capabilities: ['read'], service_category: 'cms', provider: 'wordpress' };
+  const r = gateCheck(
+    { requiredCapabilities: ['read'], serviceCategory: 'cms', provider: 'wordpress' },
+    [rightConn]
+  );
+  assert.equal(r.skip, false);
+});
+
+test('gated check without serviceCategory/provider falls back to all connections (legacy)', () => {
+  const anyConn = { status: 'verified', capabilities: ['read'], service_category: 'cms', provider: 'wordpress' };
+  const r = gateCheck({ requiredCapabilities: ['read'] }, [anyConn]);
+  assert.equal(r.skip, false);
+});

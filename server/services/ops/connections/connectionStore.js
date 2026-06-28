@@ -55,6 +55,16 @@ export async function upsertConnection({
   if (!serviceCategory) throw new Error('connectionStore: serviceCategory required');
   if (!provider) throw new Error('connectionStore: provider required');
 
+  // Enforce lifecycle transition when the row already exists — prevents callers
+  // from jumping e.g. missing → verified by going through upsert instead of
+  // setConnectionStatus (which carries the explicit transition check).
+  const existing = await getConnection(clientUserId, serviceCategory, provider);
+  if (existing && !canTransitionStatus(existing.status, status)) {
+    throw new Error(
+      `connectionStore: illegal status transition ${existing.status} → ${status} during upsert`
+    );
+  }
+
   const { rows } = await query(
     `
     INSERT INTO ops_service_connections
