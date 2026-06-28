@@ -71,7 +71,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 | F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | pending-plan | — | The missing analytics leg. |
 | F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | pending-plan | — | Promote the single GSC check to a connector. |
 | F8 | Client agent profiles | `2026-06-28-f8-client-agent-profiles.md` | **ready** | — | Goals / target CPA / budgets / policies. 5 tasks. |
-| F9 | New providers (expandability proof) | `2026-06-28-f9-new-providers.md` | pending-plan | — | GTM/GBP/Monday/GitHub/Vercel connector stubs. |
+| F9 | New providers (expandability proof) | `2026-06-28-f9-new-providers.md` | **ready** | — | GTM/GBP/Monday/GitHub/Vercel connector stubs. 7 tasks. RECONCILE on build: F9 runs after F1 — use F1's real `connections/registry.js` (not F9's stub); F1's capability registry removes the `VALID_UMBRELLAS` constraint, so the deferred `gtm.container_health` check can now register via service_category/provider — re-enable it. |
 
 A phase flips `pending-plan → ready` only once its plan doc is committed to `main`.
 
