@@ -70,7 +70,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 | F5 | Google Chat cockpit | `2026-06-28-f5-google-chat-cockpit.md` | pending-plan | — | Webhook digests → interactive app. |
 | F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | pending-plan | — | The missing analytics leg. |
 | F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | pending-plan | — | Promote the single GSC check to a connector. |
-| F8 | Client agent profiles | `2026-06-28-f8-client-agent-profiles.md` | pending-plan | — | Goals / target CPA / budgets / policies. |
+| F8 | Client agent profiles | `2026-06-28-f8-client-agent-profiles.md` | **ready** | — | Goals / target CPA / budgets / policies. 5 tasks. |
 | F9 | New providers (expandability proof) | `2026-06-28-f9-new-providers.md` | pending-plan | — | GTM/GBP/Monday/GitHub/Vercel connector stubs. |
 
 A phase flips `pending-plan → ready` only once its plan doc is committed to `main`.
