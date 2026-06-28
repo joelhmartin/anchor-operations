@@ -11,6 +11,8 @@
 
 import { query } from '../../db.js';
 import { getCheck } from './checks/registry.js';
+import { evaluateGate } from './connections/capabilityMatrix.js';
+import { listConnectionsForClient } from './connections/connectionStore.js';
 import { getCredential } from './credentialStore.js';
 import { createCostTracker } from './costTracker.js';
 import { sanitize as sanitizePayload } from './payloadSanitizer.js';
@@ -38,6 +40,43 @@ const TIER_BUDGET_CENTS = {
 
 function tierBudget(tier) {
   return TIER_BUDGET_CENTS[tier] ?? 250;
+}
+
+/**
+ * Pure capability gate (spec §4). A check that declares requiredCapabilities the
+ * client's connections don't satisfy is SKIPPED with a reason — never errored.
+ * Checks with no requiredCapabilities (every legacy umbrella check) never skip.
+ * Exported for tests via _gateCheckForTests.
+ */
+function gateCheck(def, connections) {
+  const required = Array.isArray(def?.requiredCapabilities) ? def.requiredCapabilities : [];
+  if (required.length === 0) return { skip: false };
+  // Scope to the check's own provider so a `read` cap on cms/wordpress cannot
+  // satisfy a gate declared by an analytics/ga4 check (or any other category/provider).
+  // Fall back to all connections only when the check has no explicit classification.
+  const scoped = (def.serviceCategory && def.provider)
+    ? connections.filter(c => c.service_category === def.serviceCategory && c.provider === def.provider)
+    : connections;
+  const { satisfied, missing } = evaluateGate(required, scoped);
+  if (satisfied) return { skip: false };
+  return { skip: true, reason: 'capability_gate', missing };
+}
+
+export { gateCheck as _gateCheckForTests };
+
+/**
+ * Load the client's service connections for the capability gate. A failure here
+ * must NEVER fail the run: on error we return [] so gated checks degrade to
+ * 'skipped' (safe) rather than throwing.
+ */
+async function loadClientConnections(clientUserId) {
+  if (!clientUserId) return [];
+  try {
+    return await listConnectionsForClient(clientUserId);
+  } catch (err) {
+    console.warn(`[ops/executor] connection load failed for gate: ${err?.message || err}`);
+    return [];
+  }
 }
 
 /**
@@ -490,6 +529,7 @@ export async function executeRun(runId, options = {}) {
   const budget = tierBudget(run.tier);
 
   const credentials = await resolveCredentialsForUmbrellas(run.client_user_id, umbrellas);
+  const clientConnections = await loadClientConnections(run.client_user_id);
 
   const tokenUsage = { prompt_tokens: 0, completion_tokens: 0, cost_cents: 0, by_check: {} };
   const runCostTracker = createCostTracker();
@@ -526,6 +566,20 @@ export async function executeRun(runId, options = {}) {
       });
       if (id) checkResultIds.push(id);
       hadError = true;
+      continue;
+    }
+
+    // Capability gate (spec §4): skip — never error — a check whose required
+    // capabilities aren't satisfied by this client's connections. A skip does
+    // NOT set hadError, so a run of fully-gated checks still finishes 'completed'.
+    const gate = gateCheck(def, clientConnections);
+    if (gate.skip) {
+      const skipId = await persistCheckResult(runId, run.client_user_id, def.umbrella, entry.check_id, {
+        status: 'skipped',
+        severity: null,
+        payload: { reason: gate.reason, missing_capabilities: gate.missing }
+      });
+      if (skipId) checkResultIds.push(skipId);
       continue;
     }
 
