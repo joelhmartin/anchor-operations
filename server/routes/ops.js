@@ -28,6 +28,8 @@ import { runChatTurn } from '../services/ops/agents/chatTurn.js';
 import { MODELS, DEFAULT_CHAT_MODEL, resolveRunModel } from '../services/ops/agents/models.js';
 import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js';
 import { listAllChecks } from '../services/ops/checks/registry.js';
+import { runAccessAudit } from '../services/ops/access/accessAudit.js';
+import { getLatestAuditRun } from '../services/ops/access/auditStore.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
 import {
   listSkills,
@@ -89,6 +91,25 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// --- Access Audit (north-star §0) ---
+router.get('/access/audit', async (_req, res) => {
+  try {
+    const audit = await getLatestAuditRun();
+    res.json({ audit });
+  } catch (err) {
+    res.status(500).json({ error: 'access_audit_fetch_failed', detail: err?.message });
+  }
+});
+
+router.post('/access/audit/run', async (_req, res) => {
+  try {
+    const audit = await runAccessAudit();
+    res.json({ audit });
+  } catch (err) {
+    res.status(500).json({ error: 'access_audit_run_failed', detail: err?.message });
+  }
+});
 
 function badUuid(res, name) {
   return res.status(400).json({ message: `Invalid ${name}` });

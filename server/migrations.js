@@ -36,7 +36,8 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_chat.sql',
   'migrate_ops_chat_provider.sql',
   'migrate_ops_blog.sql',
-  'migrate_ops_blog_ssh.sql'
+  'migrate_ops_blog_ssh.sql',
+  'migrate_ops_access_audit_runs.sql'
 ];
 
 const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql', 'migrate_ops_run_definition_model.sql'];
