@@ -66,7 +66,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 | F1 | Connection / capability / asset model | `2026-06-28-f1-connection-model.md` | **ready** | — | The pivotal umbrella→category/provider shim. 8 tasks. |
 | F2 | Inventory discovery | `2026-06-28-f2-inventory-discovery.md` | **ready** | — | `discoverInventory` per existing provider. 9 tasks. RECONCILE on build: F1 already creates `ops_platform_inventory` — adapt/skip F2's own migration of that table to match F1's columns (don't duplicate). |
 | F3 | Snapshots + baselines + memory | `2026-06-28-f3-snapshots-baselines-memory.md` | **ready** | — | The "knows normal" learning loop. 10 tasks. F4-recommendations memory seam documented. |
-| F4 | Recommendation → action engine | `2026-06-28-f4-recommendation-action-engine.md` | pending-plan | — | Structured action queue + policy + preflight. |
+| F4 | Recommendation → action engine | `2026-06-28-f4-recommendation-action-engine.md` | **ready** | — | Structured action queue + policy + preflight. 13 tasks. Reuses ops_tool_approvals 4-event chain. |
 | F5 | Google Chat cockpit | `2026-06-28-f5-google-chat-cockpit.md` | pending-plan | — | Webhook digests → interactive app. |
 | F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | pending-plan | — | The missing analytics leg. |
 | F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | pending-plan | — | Promote the single GSC check to a connector. |
