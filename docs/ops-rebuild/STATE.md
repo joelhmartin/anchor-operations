@@ -68,7 +68,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 | F3 | Snapshots + baselines + memory | `2026-06-28-f3-snapshots-baselines-memory.md` | **ready** | — | The "knows normal" learning loop. 10 tasks. F4-recommendations memory seam documented. |
 | F4 | Recommendation → action engine | `2026-06-28-f4-recommendation-action-engine.md` | **ready** | — | Structured action queue + policy + preflight. 13 tasks. Reuses ops_tool_approvals 4-event chain. |
 | F5 | Google Chat cockpit | `2026-06-28-f5-google-chat-cockpit.md` | pending-plan | — | Webhook digests → interactive app. |
-| F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | pending-plan | — | The missing analytics leg. |
+| F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | **ready** | — | The missing analytics leg. 7 tasks. NEW DEP: @google-analytics/data@^4.9.0. |
 | F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | pending-plan | — | Promote the single GSC check to a connector. |
 | F8 | Client agent profiles | `2026-06-28-f8-client-agent-profiles.md` | **ready** | — | Goals / target CPA / budgets / policies. 5 tasks. |
 | F9 | New providers (expandability proof) | `2026-06-28-f9-new-providers.md` | **ready** | — | GTM/GBP/Monday/GitHub/Vercel connector stubs. 7 tasks. RECONCILE on build: F9 runs after F1 — use F1's real `connections/registry.js` (not F9's stub); F1's capability registry removes the `VALID_UMBRELLAS` constraint, so the deferred `gtm.container_health` check can now register via service_category/provider — re-enable it. |
