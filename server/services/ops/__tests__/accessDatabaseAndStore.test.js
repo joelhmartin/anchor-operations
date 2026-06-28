@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuditRun, finishAuditRun, getLatestAuditRun } from '../access/auditStore.js';
+import { checkOpsTables, probeReadWrite, REQUIRED_OPS_TABLES } from '../access/databaseAccess.js';
 
 test('audit store: create → finish → latest round-trips', async () => {
   const created = await createAuditRun();
@@ -24,4 +25,28 @@ test('audit store: create → finish → latest round-trips', async () => {
 
   const latest = await getLatestAuditRun();
   assert.equal(latest.id, created.id, 'latest returns the row we just finished');
+});
+
+test('checkOpsTables reports the audit table as present after migration', async () => {
+  const r = await checkOpsTables();
+  assert.ok(REQUIRED_OPS_TABLES.includes('ops_access_audit_runs'));
+  assert.ok(r.present.includes('ops_access_audit_runs'), 'migrated table is detected');
+  assert.equal(r.status === 'verified' || r.status === 'degraded', true);
+});
+
+test('checkOpsTables flags a bogus required table as missing', async () => {
+  const r = await checkOpsTables(undefined, ['ops_runs', 'definitely_not_a_table_xyz']);
+  assert.equal(r.status, 'degraded');
+  assert.deepEqual(r.missing, ['definitely_not_a_table_xyz']);
+});
+
+test('checkOpsTables degrades to failed when the query throws', async () => {
+  const boom = async () => { throw new Error('connection refused'); };
+  const r = await checkOpsTables(boom, ['ops_runs']);
+  assert.equal(r.status, 'failed');
+});
+
+test('probeReadWrite returns verified against the live db', async () => {
+  const r = await probeReadWrite();
+  assert.equal(r.status, 'verified');
 });
