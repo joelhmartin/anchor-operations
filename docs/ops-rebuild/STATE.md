@@ -69,7 +69,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 | F4 | Recommendation → action engine | `2026-06-28-f4-recommendation-action-engine.md` | **ready** | — | Structured action queue + policy + preflight. 13 tasks. Reuses ops_tool_approvals 4-event chain. |
 | F5 | Google Chat cockpit | `2026-06-28-f5-google-chat-cockpit.md` | **ready** | — | Webhook digests → interactive app. 9 tasks (P1 webhooks 1–4, P2 interactive 5–9). |
 | F6 | GA4 connector | `2026-06-28-f6-ga4-connector.md` | **ready** | — | The missing analytics leg. 7 tasks. NEW DEP: @google-analytics/data@^4.9.0. |
-| F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | pending-plan | — | Promote the single GSC check to a connector. |
+| F7 | Search Console connector (GSC depth) | `2026-06-28-f7-search-console-connector.md` | **ready** | — | Promote the single GSC check to a connector. 7 tasks. Keeps web.gsc.* via 20-line shim. RECONCILE on build: F7 adds dedicated `ops_gsc_site_inventory`; confirm vs F1 generic `ops_platform_inventory` — prefer generic unless match-confidence truly needs its own table. |
 | F8 | Client agent profiles | `2026-06-28-f8-client-agent-profiles.md` | **ready** | — | Goals / target CPA / budgets / policies. 5 tasks. |
 | F9 | New providers (expandability proof) | `2026-06-28-f9-new-providers.md` | **ready** | — | GTM/GBP/Monday/GitHub/Vercel connector stubs. 7 tasks. RECONCILE on build: F9 runs after F1 — use F1's real `connections/registry.js` (not F9's stub); F1's capability registry removes the `VALID_UMBRELLAS` constraint, so the deferred `gtm.container_health` check can now register via service_category/provider — re-enable it. |
 
@@ -92,4 +92,4 @@ A phase flips `pending-plan → ready` only once its plan doc is committed to `m
 
 (Each routine run appends one line: `YYYY-MM-DD HH:MM — run: reviewed <phase> (merged/blocked), started <phase> (PR #N)`.)
 
-- 2026-06-28 — setup: F0 plan committed (ready); F1–F9 plans being authored; routine `ops-rebuild` created (every 2h).
+- 2026-06-28 — setup: ALL phase plans F0–F9 committed and `ready` (~16.5k plan lines total); routine `ops-rebuild` (trig_01T9Yzb6Hs9wn29ZuwiWt6vF) created (every 2h) and first run triggered immediately. Build order: F0→F1→F2→F3→F4→F5→F6→F7→F8→F9.
