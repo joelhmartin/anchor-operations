@@ -10,42 +10,49 @@ foundation-first re-plan. Conversation memory does not survive across runs — t
 
 ---
 
-## Operating model — autonomous PR-only loop (every 2h)
+## Operating model — TWO offset routines (A builds, B reviews/merges)
 
-Each routine run does **two things in order** (this is the user's "routine A and B",
-merged into one run so there is no two-cron coordination problem):
+The loop is split into two cloud routines, offset by 1 hour, each running every 2 hours:
 
-**STEP 1 — Close out the previous run (review B):**
-- If any phase is `in_review` with an open PR:
-  1. Check out the PR branch, pull latest.
-  2. Run a code review of the diff (correctness + spec compliance + tests).
-  3. Fix any errors on the branch. Ensure the full `yarn test:ops` suite is green.
-  4. If green + review clean → **merge the PR to main**, set that phase `complete`,
-     record the merge commit in this file.
-  5. If problems are **unfixable this run** → set the phase `blocked` with notes,
-     leave the PR open, and **HALT** (do not start a new phase). This is the
-     compounding-error safety: never build a new phase on an unreviewed/broken base.
+- **Routine A — BUILD** (`ops-rebuild-A`, cron `0 */2 * * *`, even UTC hours, id `trig_01T9Yzb6Hs9wn29ZuwiWt6vF`):
+  builds the next phase → opens a PR. Gets a full 2h to work. Never reviews or merges.
+- **Routine B — REVIEW/MERGE** (`ops-rebuild-B`, cron `0 1-23/2 * * *`, odd UTC hours — 1h after each A):
+  reviews the open PR (CodeRabbit's automated review has landed by now), folds in valid
+  CodeRabbit comments, fixes defects, merges if green → marks the phase `complete`.
+  Never builds a new phase.
 
-**STEP 2 — Start the next phase (build A):**
-- Pick the first phase whose status is `ready` (plan committed) and not yet built.
-- Create branch `feat/ops-fN-<slug>` off latest `main`.
-- **Re-read the phase plan against the actual current codebase.** Earlier phases are
-  now built — if the plan's assumptions drifted, adapt the plan doc first, then build.
-- Execute the plan with **subagent-driven-development** (TDD, fresh subagent per task,
-  task review after each). Commit per task.
-- Run `yarn test:ops`. Open a PR (do **not** merge it this run — the next run reviews it).
-- Set the phase `in_review` and record the branch + PR number here.
+Steady-state timeline: `A builds Fn → (1h) → B reviews+merges Fn → (1h) → A builds Fn+1 → …`
 
-**STEP 3 — Persist:** update this file (statuses, PR/commit refs), commit + push to `main`.
+**Routine A (BUILD) each run:**
+1. `git checkout main && git pull`; read this file + the spec; best-effort env setup
+   (yarn install, provision Postgres + `yarn db:migrate`, confirm `gh auth`).
+2. GUARD — if ANY phase is `in_review` or `blocked`, the reviewer hasn't merged yet (or a
+   phase needs a human): append a run-log line and STOP. **Never build ahead of a merge.**
+3. Else pick the first `ready` phase. Idempotency: if its branch/PR already exists, set it
+   `in_review` and STOP. Otherwise branch `feat/ops-fN-<slug>` off main, re-read the plan
+   against current code (adapt the plan doc if drifted), implement task-by-task TDD, ensure
+   `yarn test:ops` green, open a PR (do NOT merge), set the phase `in_review` with branch+PR#,
+   commit+push this file.
+
+**Routine B (REVIEW/MERGE) each run:**
+1. Same orient + env setup.
+2. Find the phase that is `in_review`. None → run-log "nothing to review", STOP.
+3. Check out its branch. Read the PR's existing review comments INCLUDING automated
+   reviewers (CodeRabbit): `gh pr view <n> --comments`. Triage each — fix valid points,
+   note false positives. Independently review the diff vs the plan + spec.
+4. Fix all real defects on the branch; re-run `yarn test:ops` until green.
+5. Green + clean → `gh pr merge --squash --delete-branch`; set the phase `complete`
+   (record merge commit + which CodeRabbit items were addressed); commit+push this file.
+6. Unfixable this run → set the phase `blocked` with notes, leave the PR open, STOP.
 
 ### Hard safety rules (non-negotiable)
-- Never merge with red tests.
-- Never start a new phase while any phase is `blocked`.
+- Never merge with red tests (B only).
+- Routine A never builds while any phase is `in_review` or `blocked`. Routine B never builds.
 - All implementation lands via branches + PRs (every change is revertible).
-- A run touches at most: 1 merge (prior phase) + 1 new build (next phase).
-- If the test DB can't be provisioned in the run environment, still open the PR but
-  **flag in the PR body exactly which DB-backed tests did not run**, and set status
-  `in_review` with a `db-untested` note so the review step (or human) validates.
+- Per run: A does at most 1 build; B does at most 1 review+merge.
+- Routine B must resolve every CodeRabbit comment — fix it or record why it's a false positive.
+- If the test DB can't be provisioned, still open/keep the PR but **flag in the PR body which
+  DB-backed tests did not run** (`db-untested:`), so B (or the human) validates.
 - The human may review, comment on, override, or merge/close any PR at any time.
 
 ### Test environment note
