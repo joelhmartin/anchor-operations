@@ -64,7 +64,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 |---|---|---|---|---|---|
 | F0 | Access Audit (infra-access core) | `2026-06-28-f0-access-audit.md` | **ready** | — | First build. No prior PR to review. |
 | F1 | Connection / capability / asset model | `2026-06-28-f1-connection-model.md` | **ready** | — | The pivotal umbrella→category/provider shim. 8 tasks. |
-| F2 | Inventory discovery | `2026-06-28-f2-inventory-discovery.md` | pending-plan | — | `discoverInventory` per existing provider. |
+| F2 | Inventory discovery | `2026-06-28-f2-inventory-discovery.md` | **ready** | — | `discoverInventory` per existing provider. 9 tasks. RECONCILE on build: F1 already creates `ops_platform_inventory` — adapt/skip F2's own migration of that table to match F1's columns (don't duplicate). |
 | F3 | Snapshots + baselines + memory | `2026-06-28-f3-snapshots-baselines-memory.md` | pending-plan | — | The "knows normal" learning loop. |
 | F4 | Recommendation → action engine | `2026-06-28-f4-recommendation-action-engine.md` | pending-plan | — | Structured action queue + policy + preflight. |
 | F5 | Google Chat cockpit | `2026-06-28-f5-google-chat-cockpit.md` | pending-plan | — | Webhook digests → interactive app. |
