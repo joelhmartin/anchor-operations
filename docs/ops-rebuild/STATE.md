@@ -62,7 +62,7 @@ Status vocab: `pending-plan` → `ready` → `in_review` → `complete` | `block
 
 | Phase | Title | Plan | Status | Branch / PR | Notes |
 |---|---|---|---|---|---|
-| F0 | Access Audit (infra-access core) | `2026-06-28-f0-access-audit.md` | **ready** | — | First build. No prior PR to review. |
+| F0 | Access Audit (infra-access core) | `2026-06-28-f0-access-audit.md` | **in_review** | `feat/ops-f0-access-audit` / PR #11 | 8 tasks built. 18 F0 tests pass (92/93 total; 1 pre-existing failure in scheduleFanoutBulk unrelated to F0). db-untested: none — all DB tests ran against ephemeral Postgres. |
 | F1 | Connection / capability / asset model | `2026-06-28-f1-connection-model.md` | **ready** | — | The pivotal umbrella→category/provider shim. 8 tasks. |
 | F2 | Inventory discovery | `2026-06-28-f2-inventory-discovery.md` | **ready** | — | `discoverInventory` per existing provider. 9 tasks. RECONCILE on build: F1 already creates `ops_platform_inventory` — adapt/skip F2's own migration of that table to match F1's columns (don't duplicate). |
 | F3 | Snapshots + baselines + memory | `2026-06-28-f3-snapshots-baselines-memory.md` | **ready** | — | The "knows normal" learning loop. 10 tasks. F4-recommendations memory seam documented. |
@@ -93,3 +93,4 @@ A phase flips `pending-plan → ready` only once its plan doc is committed to `m
 (Each routine run appends one line: `YYYY-MM-DD HH:MM — run: reviewed <phase> (merged/blocked), started <phase> (PR #N)`.)
 
 - 2026-06-28 — setup: ALL phase plans F0–F9 committed and `ready` (~16.5k plan lines total); routine `ops-rebuild` (trig_01T9Yzb6Hs9wn29ZuwiWt6vF) created (every 2h) and first run triggered immediately. Build order: F0→F1→F2→F3→F4→F5→F6→F7→F8→F9.
+- 2026-06-28 — run: no prior phase to review (first run); built F0 access-audit (PR #11, branch feat/ops-f0-access-audit). gh CLI absent — used GitHub MCP tools for PR creation. Postgres provisioned via pg_ctlcluster; npm install used (yarn 4.10.3 not downloadable via corepack in this environment). Pre-existing test failure in scheduleFanoutBulk (missing client_account_members.client_owner_id column in ephemeral DB) noted; not caused by F0.
