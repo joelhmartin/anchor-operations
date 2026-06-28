@@ -40,6 +40,9 @@ Steady-state timeline: `A builds Fn → (1h) → B reviews+merges Fn → (1h) �
 3. Check out its branch. Read the PR's existing review comments INCLUDING automated
    reviewers (CodeRabbit): `gh pr view <n> --comments`. Triage each — fix valid points,
    note false positives. Independently review the diff vs the plan + spec.
+   - CodeRabbit has a ~5-reviews/hour cap; at ~1 PR / 2h that's ample, so a review should
+     be present. But CodeRabbit is **additive** — your own independent review is the gate.
+     If CodeRabbit hasn't posted yet, do NOT block or wait: proceed on your own review.
 4. Fix all real defects on the branch; re-run `yarn test:ops` until green.
 5. Green + clean → `gh pr merge --squash --delete-branch`; set the phase `complete`
    (record merge commit + which CodeRabbit items were addressed); commit+push this file.
