@@ -16,7 +16,7 @@ The loop is split into two cloud routines, offset by 1 hour, each running every 
 
 - **Routine A — BUILD** (`ops-rebuild-A`, cron `0 */2 * * *`, even UTC hours, id `trig_01T9Yzb6Hs9wn29ZuwiWt6vF`):
   builds the next phase → opens a PR. Gets a full 2h to work. Never reviews or merges.
-- **Routine B — REVIEW/MERGE** (`ops-rebuild-B`, cron `0 1-23/2 * * *`, odd UTC hours — 1h after each A):
+- **Routine B — REVIEW/MERGE** (`ops-rebuild-B`, cron `0 1-23/2 * * *`, odd UTC hours — 1h after each A, id `trig_01BCk76amWWGff8QTwiPJfNk`):
   reviews the open PR (CodeRabbit's automated review has landed by now), folds in valid
   CodeRabbit comments, fixes defects, merges if green → marks the phase `complete`.
   Never builds a new phase.
