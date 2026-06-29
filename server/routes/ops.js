@@ -1421,7 +1421,8 @@ router.put('/clients/:id/agent-profile', async (req, res) => {
     );
     clientType = cpRows[0]?.client_type || null;
   } catch (err) {
-    console.warn('[ops] agent-profile PUT: client_type fetch failed:', err?.message);
+    console.error('[ops] agent-profile PUT: client_type fetch failed — refusing write:', err?.message);
+    return res.status(500).json({ message: 'Failed to verify client type — cannot write profile safely' });
   }
 
   const {

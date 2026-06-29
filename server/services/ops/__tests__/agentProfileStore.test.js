@@ -25,16 +25,21 @@ test('loadResolvedProfile returns safe defaults when no agent profile row exists
   }
   const clientUserId = userRows[0].id;
 
+  const existing = await getAgentProfile(clientUserId);
   await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
-
-  const profile = await loadResolvedProfile(clientUserId);
-  assert.equal(profile.clientUserId, clientUserId);
-  assert.equal(profile.enabled, false);
-  assert.deepEqual(profile.primary_services, []);
-  assert.deepEqual(profile.allowed_platforms, []);
-  assert.deepEqual(profile.auto_action_policy, { mode: 'off', max_risk_level: 'low' });
-  assert.deepEqual(profile.notification_policy, { email: true, digest_frequency: 'weekly' });
-  assert.deepEqual(profile.google_chat_policy, { enabled: false, space_id: null });
+  try {
+    const profile = await loadResolvedProfile(clientUserId);
+    assert.equal(profile.clientUserId, clientUserId);
+    assert.equal(profile.enabled, false);
+    assert.deepEqual(profile.primary_services, []);
+    assert.deepEqual(profile.allowed_platforms, []);
+    assert.deepEqual(profile.auto_action_policy, { mode: 'off', max_risk_level: 'low' });
+    assert.deepEqual(profile.notification_policy, { email: true, digest_frequency: 'weekly' });
+    assert.deepEqual(profile.google_chat_policy, { enabled: false, space_id: null });
+  } finally {
+    await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
+    if (existing) await upsertAgentProfile(clientUserId, existing).catch(() => {});
+  }
 });
 
 // ── upsertAgentProfile + getAgentProfile round-trip ─────────────────────────
@@ -59,8 +64,10 @@ test('upsertAgentProfile inserts then updates, getAgentProfile retrieves', async
     clientUserId = userRows[0].id;
   }
 
+  const existing = synthetic ? null : await getAgentProfile(clientUserId);
   await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
 
+  try {
   const inserted = await upsertAgentProfile(clientUserId, {
     enabled: true,
     client_name: '__f8test__',
@@ -111,6 +118,9 @@ test('upsertAgentProfile inserts then updates, getAgentProfile retrieves', async
   assert.equal(updated.target_cpa_cents, null);
 
   await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
+  } finally {
+    if (existing) await upsertAgentProfile(clientUserId, existing).catch(() => {});
+  }
 });
 
 // ── loadResolvedProfile: merges client_profiles cap ─────────────────────────
@@ -131,10 +141,15 @@ test('loadResolvedProfile merges monthly_budget_cap_cents from client_profiles',
   }
   const { id: clientUserId, ops_monthly_cap_cents } = userRows[0];
 
+  const existing = await getAgentProfile(clientUserId);
   await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
-
-  const profile = await loadResolvedProfile(clientUserId);
-  assert.equal(profile.monthly_budget_cap_cents, ops_monthly_cap_cents ?? null,
-    'monthly_budget_cap_cents must come from client_profiles.ops_monthly_cap_cents');
-  assert.equal(profile.clientUserId, clientUserId);
+  try {
+    const profile = await loadResolvedProfile(clientUserId);
+    assert.equal(profile.monthly_budget_cap_cents, ops_monthly_cap_cents ?? null,
+      'monthly_budget_cap_cents must come from client_profiles.ops_monthly_cap_cents');
+    assert.equal(profile.clientUserId, clientUserId);
+  } finally {
+    await query('DELETE FROM ops_client_agent_profiles WHERE user_id = $1', [clientUserId]);
+    if (existing) await upsertAgentProfile(clientUserId, existing).catch(() => {});
+  }
 });
