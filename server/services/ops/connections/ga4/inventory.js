@@ -12,7 +12,7 @@ export async function discoverInventory(ctx = {}) {
     rows.push({
       object_type: 'ga4_account',
       external_id: account.account,
-      display_name: account.displayName || account.account,
+      name: account.displayName || account.account,
       metadata: { account_id: account.account },
       discovered_at: now
     });
@@ -24,7 +24,7 @@ export async function discoverInventory(ctx = {}) {
       rows.push({
         object_type: 'ga4_property',
         external_id: propertyId,
-        display_name: ps.displayName || propertyId,
+        name: ps.displayName || propertyId,
         metadata: {
           property_id: propertyId,
           property_type: ps.propertyType || null,
@@ -40,7 +40,7 @@ export async function discoverInventory(ctx = {}) {
         rows.push({
           object_type: 'ga4_data_stream',
           external_id: stream.name,
-          display_name: stream.displayName || stream.name,
+          name: stream.displayName || stream.name,
           metadata: {
             property_id: propertyId,
             stream_type: stream.type || null,
@@ -55,7 +55,7 @@ export async function discoverInventory(ctx = {}) {
         rows.push({
           object_type: 'ga4_key_event',
           external_id: ke.name,
-          display_name: ke.eventName,
+          name: ke.eventName,
           metadata: {
             property_id: propertyId,
             event_name: ke.eventName,

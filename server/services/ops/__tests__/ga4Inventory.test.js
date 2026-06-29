@@ -90,13 +90,13 @@ test('discoverInventory builds rows for account, property, data stream, and key 
 
   const prop = byType('ga4_property')[0];
   assert.equal(prop.external_id, 'properties/222');
-  assert.equal(prop.display_name, 'Acme Website');
+  assert.equal(prop.name, 'Acme Website');
 
   const stream = byType('ga4_data_stream')[0];
   assert.equal(stream.metadata.measurement_id, 'G-ACME1234');
 
   const ke = byType('ga4_key_event')[0];
-  assert.equal(ke.display_name, 'generate_lead');
+  assert.equal(ke.name, 'generate_lead');
   assert.equal(ke.metadata.event_name, 'generate_lead');
 
   assert.ok(rows.every((r) => typeof r.discovered_at === 'string'));

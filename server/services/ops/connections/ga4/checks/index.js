@@ -27,15 +27,15 @@ async function getBaseline(ctx, metricKey) {
   if (ctx.ga4Baseline != null && ctx.ga4Baseline[metricKey] !== undefined) {
     return ctx.ga4Baseline[metricKey];
   }
-  if (!ctx.serviceConnectionId) return null;
+  if (!ctx.clientUserId) return null;
   try {
     const { rows } = await query(
-      `SELECT metric_value FROM ops_metric_baselines
-        WHERE service_connection_id = $1 AND metric_name = $2
-        ORDER BY updated_at DESC LIMIT 1`,
-      [ctx.serviceConnectionId, metricKey]
+      `SELECT baseline_value FROM ops_metric_baselines
+        WHERE client_user_id = $1 AND service = 'ga4' AND metric = $2
+        ORDER BY computed_at DESC LIMIT 1`,
+      [ctx.clientUserId, metricKey]
     );
-    return rows[0]?.metric_value ?? null;
+    return rows[0]?.baseline_value ?? null;
   } catch {
     return null;
   }

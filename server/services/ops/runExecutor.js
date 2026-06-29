@@ -28,6 +28,7 @@ import './checks/website/index.js';
 import './checks/google_ads/index.js';
 import './checks/meta/index.js';
 import './checks/ctm/index.js';
+import './checks/ga4/index.js';
 
 const DEFAULT_CHECK_TIMEOUT_MS = 60_000;
 

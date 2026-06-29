@@ -42,8 +42,8 @@ test('discoverAndPersist sanitizes rows, builds scope, and persists', async () =
   assert.ok(captured.rows[0].name.includes('[REDACTED]'));
 });
 
-test('INVENTORY_CONNECTORS exports 6 connectors with discoverInventory', () => {
-  assert.equal(INVENTORY_CONNECTORS.length, 6);
+test('INVENTORY_CONNECTORS exports 7 connectors with discoverInventory', () => {
+  assert.equal(INVENTORY_CONNECTORS.length, 7);
   for (const c of INVENTORY_CONNECTORS) {
     assert.ok(typeof c.id === 'string' && c.id, `${c.id ?? '?'} has id`);
     assert.ok(typeof c.discoverInventory === 'function', `${c.id} has discoverInventory`);
@@ -55,6 +55,9 @@ test('runAllInventoryDiscovery calls each connector and returns results array', 
   const fakeUpsert = async (_scope, rows) => { calls++; return { written: rows.length }; };
   // Provide mocks for every client dependency so no real I/O or DB queries happen.
   const ctx = {
+    // ga4: token skips getAdminAccessToken; fetchFn returns empty account list
+    token: 'test-ga4-token',
+    fetchFn: async () => ({ ok: true, json: async () => ({ accountSummaries: [] }), text: async () => '' }),
     clients: {
       resolveUrl: async () => null,                           // public_http → no url → []
       withCustomer: async () => ({ skipped: true }),          // google_ads → skipped → []
@@ -65,6 +68,6 @@ test('runAllInventoryDiscovery calls each connector and returns results array', 
     // ctm: no ctx.clientUserId → returns [] without hitting clients
   };
   const results = await runAllInventoryDiscovery(ctx, { upsert: fakeUpsert });
-  assert.equal(results.length, 6, 'one result per connector');
-  assert.equal(calls, 6, 'upsert called for each connector');
+  assert.equal(results.length, 7, 'one result per connector');
+  assert.equal(calls, 7, 'upsert called for each connector');
 });
