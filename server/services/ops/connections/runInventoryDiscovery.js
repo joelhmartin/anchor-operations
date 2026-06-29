@@ -8,6 +8,7 @@
  */
 import { sanitize } from '../payloadSanitizer.js';
 import { upsertInventory } from './inventoryStore.js';
+import { INVENTORY_CONNECTORS } from './providers/index.js';
 
 export async function discoverAndPersist(connector, ctx = {}, deps = {}) {
   const { upsert = upsertInventory } = deps;
@@ -28,4 +29,16 @@ export async function discoverAndPersist(connector, ctx = {}, deps = {}) {
 
   const { written } = await upsert(scope, rows);
   return { provider: connector.provider, discovered: rows.length, written, rows };
+}
+
+/**
+ * Run discoverAndPersist for every F2 inventory connector in sequence.
+ * The executor calls this to enumerate all known providers for a given ctx.
+ */
+export async function runAllInventoryDiscovery(ctx = {}, deps = {}) {
+  const results = [];
+  for (const connector of INVENTORY_CONNECTORS) {
+    results.push(await discoverAndPersist(connector, ctx, deps));
+  }
+  return results;
 }

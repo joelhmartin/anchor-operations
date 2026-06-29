@@ -10,6 +10,7 @@ import { inventoryRow } from '../inventoryRow.js';
 
 function extractLinks(html, baseUrl) {
   const set = new Set();
+  const baseOrigin = new URL(baseUrl).origin;
   const re = /<a\b[^>]*\bhref=["']([^"'#]+)/gi;
   let m;
   while ((m = re.exec(html)) && set.size < 100) {
@@ -17,7 +18,9 @@ function extractLinks(html, baseUrl) {
     if (!href || /^(mailto:|tel:|javascript:)/i.test(href)) continue;
     try {
       const u = new URL(href, baseUrl);
-      if (u.protocol === 'http:' || u.protocol === 'https:') set.add(u.origin + u.pathname);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') continue;
+      if (u.origin !== baseOrigin) continue;
+      set.add(u.origin + u.pathname);
     } catch { /* ignore malformed href */ }
   }
   return [...set];

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inventoryRow } from '../connections/inventoryRow.js';
-import { discoverAndPersist } from '../connections/runInventoryDiscovery.js';
+import { discoverAndPersist, runAllInventoryDiscovery } from '../connections/runInventoryDiscovery.js';
+import { INVENTORY_CONNECTORS } from '../connections/index.js';
 
 test('inventoryRow applies defaults and stringifies ids', () => {
   const r = inventoryRow({ object_type: 'campaign', external_id: 12345, name: 'Brand' });
@@ -39,4 +40,31 @@ test('discoverAndPersist sanitizes rows, builds scope, and persists', async () =
   // sanitization fired on name AND metadata
   assert.ok(!JSON.stringify(captured.rows).includes('bob@acme.com'), 'email redacted everywhere');
   assert.ok(captured.rows[0].name.includes('[REDACTED]'));
+});
+
+test('INVENTORY_CONNECTORS exports 6 connectors with discoverInventory', () => {
+  assert.equal(INVENTORY_CONNECTORS.length, 6);
+  for (const c of INVENTORY_CONNECTORS) {
+    assert.ok(typeof c.id === 'string' && c.id, `${c.id ?? '?'} has id`);
+    assert.ok(typeof c.discoverInventory === 'function', `${c.id} has discoverInventory`);
+  }
+});
+
+test('runAllInventoryDiscovery calls each connector and returns results array', async () => {
+  let calls = 0;
+  const fakeUpsert = async (_scope, rows) => { calls++; return { written: rows.length }; };
+  // Provide mocks for every client dependency so no real I/O or DB queries happen.
+  const ctx = {
+    clients: {
+      resolveUrl: async () => null,                           // public_http → no url → []
+      withCustomer: async () => ({ skipped: true }),          // google_ads → skipped → []
+      kinsta: { listAllSites: async () => [] },               // kinsta → no sites → []
+      assertNonMedical: async () => ({ skipped: true }),      // meta → skipped → []
+    }
+    // wordpress: no ctx.environmentId → returns [] without hitting clients
+    // ctm: no ctx.clientUserId → returns [] without hitting clients
+  };
+  const results = await runAllInventoryDiscovery(ctx, { upsert: fakeUpsert });
+  assert.equal(results.length, 6, 'one result per connector');
+  assert.equal(calls, 6, 'upsert called for each connector');
 });

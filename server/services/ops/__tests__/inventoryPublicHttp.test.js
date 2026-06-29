@@ -11,6 +11,7 @@ const HTML = `
 <a href="/about">About</a>
 <a href="https://acme.com/contact">Contact</a>
 <a href="mailto:hi@acme.com">Email</a>
+<a href="https://facebook.com/acme-page">Facebook</a>
 <form id="lead" action="/submit"></form>
 </body></html>`;
 
@@ -28,6 +29,7 @@ test('public_http connector emits url/form/tracking_tag rows', async () => {
   assert.ok(urls.some((u) => u.external_id === 'https://acme.com/about'), 'relative link resolved');
   assert.ok(urls.some((u) => u.external_id === 'https://acme.com/contact'), 'absolute internal link present');
   assert.ok(!urls.some((u) => /mailto:/.test(u.external_id)), 'mailto links excluded');
+  assert.ok(!urls.some((u) => u.external_id.includes('facebook.com')), 'external-origin links excluded');
 
   const form = rows.find((r) => r.object_type === 'form');
   assert.equal(form.external_id, 'lead');
