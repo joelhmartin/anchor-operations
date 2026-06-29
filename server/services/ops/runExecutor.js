@@ -29,6 +29,7 @@ import './checks/google_ads/index.js';
 import './checks/meta/index.js';
 import './checks/ctm/index.js';
 import './checks/ga4/index.js';
+import './checks/gtm/index.js'; // F9 RECONCILE: gtm.container_health via serviceCategory+provider
 
 const DEFAULT_CHECK_TIMEOUT_MS = 60_000;
 
