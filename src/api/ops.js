@@ -102,3 +102,10 @@ export const getOpsChatThread = (threadId) =>
   client.get(`/ops/chat/threads/${threadId}`).then((res) => res.data);
 
 export const getChatModels = () => client.get('/ops/chat/models').then((r) => r.data);
+
+
+export const getClientAgentProfile = (clientUserId) =>
+  client.get(`/ops/clients/${clientUserId}/agent-profile`).then((r) => r.data);
+
+export const updateClientAgentProfile = (clientUserId, body) =>
+  client.put(`/ops/clients/${clientUserId}/agent-profile`, body).then((r) => r.data);

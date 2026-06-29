@@ -14,7 +14,8 @@ export const CONFIG_SECTIONS = [
   { value: 'health', label: 'Health checks' },
   { value: 'connections', label: 'Connections' },
   { value: 'runs', label: 'Run history' },
-  { value: 'cost', label: 'Cost' }
+  { value: 'cost', label: 'Cost' },
+  { value: 'agent_profile', label: 'Agent profile' }
 ];
 const ALL_SECTIONS = [...CLIENT_SECTIONS, ...CONFIG_SECTIONS].map((s) => s.value);
 const VIEWS = ['home', 'clients', 'portfolio'];
