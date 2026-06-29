@@ -199,6 +199,26 @@ Approval audit chain (every mutation):
 
 All events route to `SecurityEventCategories.OPERATIONS`.
 
+### 8.1 Recommendation → action engine (F4)
+
+`server/services/ops/recommendations/` turns correlated `ops_findings` into
+`ops_action_recommendations`: collect → deterministic risk score → compare F3
+baselines → group → **single LLM call to summarize/prioritize only** → policy
+decides `approval_level` (`none|approval_required|admin_required|blocked`). The
+LLM never computes a number and never calls a tool.
+
+`server/services/ops/actions/` executes the safe ones. An abstract action
+(`website.clear_cache`) resolves to a provider action
+(`hosting.kinsta.clear_cache`) only for a connected, capable provider (F1
+contract). Every action runs **policy gate → preflight → approval → execute →
+verify → audit → notify**, reusing the `ops_tool_approvals` four-event chain
+(`operations.tool_proposed/approved/executed/rejected`). Destructive actions are
+blocked; mutations are disabled by default; medical clients are stricter.
+
+Routes (admin): `GET /clients/:id/recommendations`,
+`POST /clients/:id/recommendations/build`,
+`POST /recommendations/:id/approve`, `POST /recommendations/:id/reject`.
+
 ---
 
 ## 9. UI — client-first left-rail IA

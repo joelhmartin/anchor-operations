@@ -54,6 +54,9 @@ import { storeFile } from '../services/fileStorage.js';
 import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites, listClientKinstaBlogTargets, isClientKinstaEnvironment } from '../services/ops/blog/blogStore.js';
 import { loadClientOverview } from '../services/ops/clientOverview.js';
 import { loadHomeDigest } from '../services/ops/homeDigest.js';
+import { buildRecommendations } from '../services/ops/recommendations/buildRecommendations.js';
+import { listRecommendations, getRecommendation } from '../services/ops/recommendations/recommendationStore.js';
+import { proposeAction, executeAction, rejectAction } from '../services/ops/actions/executor.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -1773,6 +1776,60 @@ router.post('/blog/media', blogUpload.single('file'), async (req, res) => {
     const stored = await storeFile(req.file, { category: 'blog', ownerId: req.user.id, ownerType: 'ops_blog' });
     res.json(stored); // { id, url }
   } catch (err) { console.error('[ops] POST /blog/media failed:', err); res.status(500).json({ message: 'Upload failed' }); }
+});
+
+// --- F4 Recommendation → action engine ---
+router.get('/clients/:id/recommendations', async (req, res) => {
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
+  try {
+    const recommendations = await listRecommendations({ clientUserId: req.params.id, status: req.query.status || undefined });
+    res.json({ recommendations });
+  } catch (err) {
+    res.status(500).json({ error: 'recommendations_fetch_failed', detail: err?.message });
+  }
+});
+
+router.post('/clients/:id/recommendations/build', async (req, res) => {
+  if (!(await isOperationsClient(req.params.id))) return res.status(404).json({ message: 'Client account not found' });
+  try {
+    const out = await buildRecommendations({ clientUserId: req.params.id, runId: req.body?.runId || null });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: 'recommendations_build_failed', detail: err?.message });
+  }
+});
+
+router.post('/recommendations/:recId/approve', async (req, res) => {
+  try {
+    const rec = await getRecommendation(req.params.recId);
+    if (!rec) return res.status(404).json({ message: 'Recommendation not found' });
+    if (!(await isOperationsClient(rec.client_user_id))) return res.status(404).json({ message: 'Client account not found' });
+    // Reject requests on already-finalized recommendations to prevent double-execution.
+    const FINAL_STATUSES = ['executed', 'rejected', 'failed', 'blocked'];
+    if (FINAL_STATUSES.includes(rec.status)) {
+      return res.status(409).json({ error: 'recommendation_already_finalized', status: rec.status });
+    }
+    // Ensure an approval row exists (mutating recs), then execute as an admin actor.
+    if (!rec.approval_id && rec.mutating && rec.abstract_action_type) {
+      await proposeAction({ recommendationId: rec.id, userId: req.user?.id });
+    }
+    const out = await executeAction({ recommendationId: rec.id, userId: req.user?.id, actorIsAdmin: true });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: 'recommendation_approve_failed', detail: err?.message });
+  }
+});
+
+router.post('/recommendations/:recId/reject', async (req, res) => {
+  try {
+    const rec = await getRecommendation(req.params.recId);
+    if (!rec) return res.status(404).json({ message: 'Recommendation not found' });
+    if (!(await isOperationsClient(rec.client_user_id))) return res.status(404).json({ message: 'Client account not found' });
+    const out = await rejectAction({ recommendationId: rec.id, userId: req.user?.id, reason: req.body?.reason });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: 'recommendation_reject_failed', detail: err?.message });
+  }
 });
 
 export default router;
