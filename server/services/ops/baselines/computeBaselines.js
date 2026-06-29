@@ -1,3 +1,8 @@
+import {
+  loadSnapshotSeries as loadSnapshotSeriesDefault,
+  upsertBaseline as upsertBaselineDefault
+} from './baselineStore.js';
+
 /**
  * Deterministic baseline math (F3). PURE — no DB, no I/O, no LLM.
  *
@@ -75,4 +80,26 @@ export function computeBaselinesForSeries({ series, asOf, periods = ALL_PERIODS 
       window_end: end
     };
   });
+}
+
+/**
+ * Orchestrator: load a metric's snapshot series, compute every period's baseline,
+ * and persist the periods that actually have data. Deps are injectable so this is
+ * testable with no DB. The math is delegated to the pure functions above.
+ */
+export async function computeAndPersistBaselines({
+  clientUserId, service, scopeType, scopeId, metric, asOf,
+  periods = ALL_PERIODS,
+  loadSnapshotSeries = loadSnapshotSeriesDefault,
+  upsertBaseline = upsertBaselineDefault
+}) {
+  const series = await loadSnapshotSeries({ clientUserId, service, scopeType, scopeId, metric, asOf });
+  const baselines = computeBaselinesForSeries({ series, asOf, periods });
+  let persisted = 0;
+  for (const b of baselines) {
+    if (b.sample_count === 0) continue;
+    await upsertBaseline({ clientUserId, service, scopeType, scopeId, metric, ...b });
+    persisted += 1;
+  }
+  return { metric, computed: baselines.length, persisted };
 }
