@@ -26,23 +26,46 @@ function ghHeaders(token) {
   };
 }
 
+// Extract the next-page URL from a GitHub Link header, or null if no next page.
+function getLinkNext(res) {
+  const link = typeof res.headers?.get === 'function' ? res.headers.get('link') : '';
+  if (!link) return null;
+  const m = link.match(/<([^>]+)>;\s*rel="next"/);
+  return m ? m[1] : null;
+}
+
 export async function verifyConnection(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
   const token = getToken(env);
-  if (!token) return { status: 'missing', detail: 'GITHUB_TOKEN not set or blank', capabilities: {} };
+  if (!token) return { status: 'missing', detail: 'GITHUB_TOKEN not set or blank', capabilities: [] };
   try {
     const res = await fetchFn(`${GH_BASE}/user`, { headers: ghHeaders(token) });
     if (!res.ok) {
-      return { status: 'failed', detail: `GitHub API ${res.status}`, capabilities: {} };
+      return { status: 'failed', detail: `GitHub API ${res.status}`, capabilities: [] };
     }
     const user = await res.json();
+
+    // When GITHUB_ORG is configured, verify org endpoint is reachable (inventory will use it).
+    const org = (env.GITHUB_ORG || '').trim();
+    if (org) {
+      const orgRes = await fetchFn(`${GH_BASE}/orgs/${org}/repos?per_page=1`, { headers: ghHeaders(token) });
+      if (!orgRes.ok) {
+        return {
+          status: 'failed',
+          detail: `GitHub token valid but org '${org}' is not accessible (HTTP ${orgRes.status}) — check read:org scope`,
+          capabilities: []
+        };
+      }
+    }
+
+    const caps = await listCapabilities(ctx);
     return {
       status: 'verified',
       detail: `Authenticated as @${user.login} (${user.name || user.login})`,
-      capabilities: await listCapabilities(ctx)
+      capabilities: Object.keys(caps).filter((k) => caps[k])
     };
   } catch (err) {
-    return { status: 'failed', detail: err.message, capabilities: {} };
+    return { status: 'failed', detail: err.message, capabilities: [] };
   }
 }
 
@@ -57,18 +80,27 @@ export async function discoverInventory(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
   const token = getToken(env);
   const org = (env.GITHUB_ORG || '').trim();
-  const url = org
+  const firstUrl = org
     ? `${GH_BASE}/orgs/${org}/repos?per_page=50&sort=updated`
     : `${GH_BASE}/user/repos?per_page=50&sort=updated&affiliation=owner,organization_member`;
-  const res = await fetchFn(url, { headers: ghHeaders(token) });
-  if (!res.ok) throw new Error(`GitHub repos API ${res.status}`);
-  const repos = await res.json();
+
+  const repos = [];
+  let nextUrl = firstUrl;
+  while (nextUrl) {
+    const res = await fetchFn(nextUrl, { headers: ghHeaders(token) });
+    if (!res.ok) throw new Error(`GitHub repos API ${res.status}`);
+    const page = await res.json();
+    repos.push(...page);
+    nextUrl = getLinkNext(res);
+  }
+
   return repos.map((r) => ({
     provider: 'github',
     serviceCategory: 'repo',
-    externalId: String(r.id),
+    object_type: 'repo',
+    external_id: String(r.id),
     name: r.full_name,
-    meta: {
+    metadata: {
       defaultBranch: r.default_branch,
       private: r.private,
       language: r.language || null,

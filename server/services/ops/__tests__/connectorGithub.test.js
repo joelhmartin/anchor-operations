@@ -16,7 +16,29 @@ test('verifyConnection: valid token → verified', async () => {
   const r = await verifyConnection({ env: { GITHUB_TOKEN: 'ghp_test123' }, fetch });
   assert.equal(r.status, 'verified');
   assert.ok(r.detail.includes('@anchorcorps'), `detail: ${r.detail}`);
-  assert.equal(r.capabilities['repo.list'], true);
+  assert.ok(Array.isArray(r.capabilities), 'capabilities should be an array');
+  assert.ok(r.capabilities.includes('repo.list'), 'should include repo.list');
+});
+
+test('verifyConnection: with GITHUB_ORG set also checks org endpoint', async () => {
+  const calls = [];
+  const fetch = async (url, _opts) => {
+    calls.push(url);
+    return { ok: true, json: async () => ({ id: 1, login: 'anchorcorps', name: 'Anchor Corps' }) };
+  };
+  const r = await verifyConnection({ env: { GITHUB_TOKEN: 'ghp_test', GITHUB_ORG: 'anchorcorps' }, fetch });
+  assert.equal(r.status, 'verified');
+  assert.ok(calls.some((u) => u.includes('/orgs/anchorcorps/repos')), 'should call org repos endpoint');
+});
+
+test('verifyConnection: GITHUB_ORG set but org not accessible → failed', async () => {
+  const fetch = async (url, _opts) => {
+    if (url.includes('/orgs/')) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, json: async () => ({ id: 1, login: 'anchorcorps', name: 'Anchor Corps' }) };
+  };
+  const r = await verifyConnection({ env: { GITHUB_TOKEN: 'ghp_test', GITHUB_ORG: 'anchorcorps' }, fetch });
+  assert.equal(r.status, 'failed');
+  assert.ok(r.detail.includes('anchorcorps'), `detail: ${r.detail}`);
 });
 
 test('verifyConnection: missing token → missing (no fetch call)', async () => {
@@ -45,7 +67,7 @@ test('listCapabilities: returns repo capability map', async () => {
   assert.equal(caps['repo.inspect'], true);
 });
 
-test('discoverInventory: maps repos to inventory rows', async () => {
+test('discoverInventory: maps repos to canonical inventory rows', async () => {
   const repos = [{
     id: 1001,
     full_name: 'anchorcorps/anchor-operations',
@@ -61,11 +83,12 @@ test('discoverInventory: maps repos to inventory rows', async () => {
   const r = rows[0];
   assert.equal(r.provider, 'github');
   assert.equal(r.serviceCategory, 'repo');
-  assert.equal(r.externalId, '1001');
+  assert.equal(r.object_type, 'repo');
+  assert.equal(r.external_id, '1001');
   assert.equal(r.name, 'anchorcorps/anchor-operations');
-  assert.equal(r.meta.defaultBranch, 'main');
-  assert.equal(r.meta.private, true);
-  assert.equal(r.meta.language, 'JavaScript');
+  assert.equal(r.metadata.defaultBranch, 'main');
+  assert.equal(r.metadata.private, true);
+  assert.equal(r.metadata.language, 'JavaScript');
 });
 
 test('discoverInventory: uses org endpoint when GITHUB_ORG is set', async () => {

@@ -107,6 +107,7 @@ test('gtm check has non-legacy umbrella — no VALID_UMBRELLAS modification need
 test('GBP connector capabilities are all false (STUB proof)', async () => {
   const gbp = getConnector('local/gbp');
   const caps = await gbp.listCapabilities({});
+  assert.ok(Object.keys(caps).length > 0, 'GBP stub should expose at least one capability');
   for (const [cap, val] of Object.entries(caps)) {
     assert.equal(val, false, `GBP capability ${cap} should be false (STUB), got ${val}`);
   }
@@ -117,6 +118,7 @@ test('monday/github/vercel/gtm listCapabilities return only true entries', async
   for (const { id } of nonGbp) {
     const c = getConnector(id);
     const caps = await c.listCapabilities({});
+    assert.ok(Object.keys(caps).length > 0, `${id}: listCapabilities() should not return an empty object`);
     const falseCaps = Object.entries(caps).filter(([, v]) => v === false);
     assert.deepEqual(
       falseCaps,

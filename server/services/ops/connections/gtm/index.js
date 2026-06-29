@@ -45,7 +45,7 @@ export async function verifyConnection(ctx = {}) {
     getAccessToken = defaultGetAccessToken
   } = ctx;
   if (!hasKey(env)) {
-    return { status: 'missing', detail: 'GTM_SERVICE_ACCOUNT_KEY not set or blank', capabilities: {} };
+    return { status: 'missing', detail: 'GTM_SERVICE_ACCOUNT_KEY not set or blank', capabilities: [] };
   }
   try {
     const token = await getAccessToken(env);
@@ -53,17 +53,18 @@ export async function verifyConnection(ctx = {}) {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
-      return { status: 'failed', detail: `GTM API ${res.status}`, capabilities: {} };
+      return { status: 'failed', detail: `GTM API ${res.status}`, capabilities: [] };
     }
     const data = await res.json();
     const count = (data.account || []).length;
+    const caps = await listCapabilities(ctx);
     return {
       status: 'verified',
       detail: `GTM access confirmed — ${count} account(s) visible`,
-      capabilities: await listCapabilities(ctx)
+      capabilities: Object.keys(caps).filter((k) => caps[k])
     };
   } catch (err) {
-    return { status: 'failed', detail: err.message, capabilities: {} };
+    return { status: 'failed', detail: err.message, capabilities: [] };
   }
 }
 
@@ -99,9 +100,10 @@ export async function discoverInventory(ctx = {}) {
       rows.push({
         provider: 'gtm',
         serviceCategory: 'measurement',
-        externalId: container.containerId,
+        object_type: 'container',
+        external_id: container.containerId,
         name: container.name,
-        meta: {
+        metadata: {
           accountId: account.accountId,
           accountName: account.name,
           publicId: container.publicId || null,

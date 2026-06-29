@@ -16,8 +16,9 @@ test('verifyConnection: valid token → verified', async () => {
   const r = await verifyConnection({ env: { VERCEL_API_TOKEN: 'tok_abc' }, fetch });
   assert.equal(r.status, 'verified');
   assert.ok(r.detail.includes('Anchor Corps'), `detail: ${r.detail}`);
-  assert.equal(r.capabilities['project.list'], true);
-  assert.equal(r.capabilities['deployment.list'], true);
+  assert.ok(Array.isArray(r.capabilities), 'capabilities should be an array');
+  assert.ok(r.capabilities.includes('project.list'));
+  assert.ok(r.capabilities.includes('deployment.list'));
 });
 
 test('verifyConnection: missing token → missing (no fetch call)', async () => {
@@ -57,7 +58,7 @@ test('listCapabilities: returns deployment capability map', async () => {
   assert.equal(caps['deployment.inspect'], true);
 });
 
-test('discoverInventory: maps projects to inventory rows', async () => {
+test('discoverInventory: maps projects to canonical inventory rows', async () => {
   const projects = [{
     id: 'prj_abc123',
     name: 'anchor-hub',
@@ -72,20 +73,21 @@ test('discoverInventory: maps projects to inventory rows', async () => {
   const r = rows[0];
   assert.equal(r.provider, 'vercel');
   assert.equal(r.serviceCategory, 'deployment');
-  assert.equal(r.externalId, 'prj_abc123');
+  assert.equal(r.object_type, 'project');
+  assert.equal(r.external_id, 'prj_abc123');
   assert.equal(r.name, 'anchor-hub');
-  assert.equal(r.meta.framework, 'nextjs');
-  assert.equal(r.meta.latestDeploymentUrl, 'anchor-hub-abc.vercel.app');
-  assert.equal(r.meta.productionUrl, 'anchorcorps.com');
+  assert.equal(r.metadata.framework, 'nextjs');
+  assert.equal(r.metadata.latestDeploymentUrl, 'anchor-hub-abc.vercel.app');
+  assert.equal(r.metadata.productionUrl, 'anchorcorps.com');
 });
 
 test('discoverInventory: projects with no latestDeployments or targets → null meta', async () => {
   const projects = [{ id: 'prj_bare', name: 'bare-project', updatedAt: 0 }];
   const fetch = fakeFetch({ projects });
   const rows = await discoverInventory({ env: { VERCEL_API_TOKEN: 'tok' }, fetch });
-  assert.equal(rows[0].meta.latestDeploymentUrl, null);
-  assert.equal(rows[0].meta.productionUrl, null);
-  assert.equal(rows[0].meta.framework, null);
+  assert.equal(rows[0].metadata.latestDeploymentUrl, null);
+  assert.equal(rows[0].metadata.productionUrl, null);
+  assert.equal(rows[0].metadata.framework, null);
 });
 
 test('discoverInventory: empty projects → empty array', async () => {

@@ -11,13 +11,14 @@ function fakeFetch(json, { ok = true, status = 200 } = {}) {
   });
 }
 
-test('verifyConnection: valid token → verified with capabilities', async () => {
+test('verifyConnection: valid token → verified with capabilities array', async () => {
   const fetch = fakeFetch({ data: { me: { id: '123', name: 'Joel Martin', email: 'jmartin@anchorcorps.com' } } });
   const r = await verifyConnection({ env: { MONDAY_API_TOKEN: 'tok_live' }, fetch });
   assert.equal(r.status, 'verified');
   assert.ok(r.detail.includes('Joel Martin'), `detail: ${r.detail}`);
-  assert.equal(r.capabilities['task.create'], true);
-  assert.equal(r.capabilities['task.list'], true);
+  assert.ok(Array.isArray(r.capabilities), 'capabilities should be an array');
+  assert.ok(r.capabilities.includes('task.create'));
+  assert.ok(r.capabilities.includes('task.list'));
 });
 
 test('verifyConnection: missing token → missing (no fetch call)', async () => {
@@ -54,7 +55,7 @@ test('listCapabilities: returns task capability map without ctx', async () => {
   assert.equal(caps['board.list'], true);
 });
 
-test('discoverInventory: maps boards to inventory rows', async () => {
+test('discoverInventory: maps boards to canonical inventory rows', async () => {
   const fetch = fakeFetch({
     data: { boards: [{ id: '42', name: 'Operations Board', description: 'Main ops tracking' }] }
   });
@@ -63,9 +64,10 @@ test('discoverInventory: maps boards to inventory rows', async () => {
   const r = rows[0];
   assert.equal(r.provider, 'monday');
   assert.equal(r.serviceCategory, 'task');
-  assert.equal(r.externalId, '42');
+  assert.equal(r.object_type, 'board');
+  assert.equal(r.external_id, '42');
   assert.equal(r.name, 'Operations Board');
-  assert.equal(r.meta.description, 'Main ops tracking');
+  assert.equal(r.metadata.description, 'Main ops tracking');
 });
 
 test('discoverInventory: empty boards list → empty array', async () => {

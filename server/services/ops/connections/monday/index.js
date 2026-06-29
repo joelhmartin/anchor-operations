@@ -10,6 +10,7 @@
 import { registerConnector } from '../registry.js';
 
 const MONDAY_API = 'https://api.monday.com/v2';
+const PAGE_LIMIT = 50;
 
 function getToken(env) {
   return (env.MONDAY_API_TOKEN || '').trim() || null;
@@ -43,19 +44,20 @@ export async function verifyConnection(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
   const token = getToken(env);
   if (!token) {
-    return { status: 'missing', detail: 'MONDAY_API_TOKEN not set or blank', capabilities: {} };
+    return { status: 'missing', detail: 'MONDAY_API_TOKEN not set or blank', capabilities: [] };
   }
   try {
     const data = await gql('{ me { id name email } }', {}, { env, fetch: fetchFn });
     const me = data?.me;
     if (!me?.id) throw new Error('Unexpected response shape (me.id missing)');
+    const caps = await listCapabilities(ctx);
     return {
       status: 'verified',
       detail: `Authenticated as ${me.name} (${me.email})`,
-      capabilities: await listCapabilities(ctx)
+      capabilities: Object.keys(caps).filter((k) => caps[k])
     };
   } catch (err) {
-    return { status: 'failed', detail: err.message, capabilities: {} };
+    return { status: 'failed', detail: err.message, capabilities: [] };
   }
 }
 
@@ -69,17 +71,26 @@ export async function listCapabilities(_ctx = {}) {
 
 export async function discoverInventory(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
-  const data = await gql(
-    '{ boards(limit: 50, board_kind: public) { id name description } }',
-    {},
-    { env, fetch: fetchFn }
-  );
-  return (data.boards || []).map((b) => ({
+  const boards = [];
+  let page = 1;
+  while (true) {
+    const data = await gql(
+      `{ boards(limit: ${PAGE_LIMIT}, page: ${page}) { id name description } }`,
+      {},
+      { env, fetch: fetchFn }
+    );
+    const batch = data.boards || [];
+    boards.push(...batch);
+    if (batch.length < PAGE_LIMIT) break;
+    page++;
+  }
+  return boards.map((b) => ({
     provider: 'monday',
     serviceCategory: 'task',
-    externalId: String(b.id),
+    object_type: 'board',
+    external_id: String(b.id),
     name: b.name,
-    meta: { description: b.description || null }
+    metadata: { description: b.description || null }
   }));
 }
 

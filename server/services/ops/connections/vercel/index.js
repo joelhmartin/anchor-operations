@@ -37,20 +37,21 @@ function withTeam(base, env) {
 export async function verifyConnection(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
   const token = getToken(env);
-  if (!token) return { status: 'missing', detail: 'VERCEL_API_TOKEN not set or blank', capabilities: {} };
+  if (!token) return { status: 'missing', detail: 'VERCEL_API_TOKEN not set or blank', capabilities: [] };
   try {
     const url = withTeam(`${VERCEL_BASE}/v2/user`, env);
     const res = await fetchFn(url, { headers: vercelHeaders(token) });
-    if (!res.ok) return { status: 'failed', detail: `Vercel API ${res.status}`, capabilities: {} };
+    if (!res.ok) return { status: 'failed', detail: `Vercel API ${res.status}`, capabilities: [] };
     const data = await res.json();
     const u = data.user || data;
+    const caps = await listCapabilities(ctx);
     return {
       status: 'verified',
       detail: `Authenticated as ${u.name || u.username || 'unknown'}`,
-      capabilities: await listCapabilities(ctx)
+      capabilities: Object.keys(caps).filter((k) => caps[k])
     };
   } catch (err) {
-    return { status: 'failed', detail: err.message, capabilities: {} };
+    return { status: 'failed', detail: err.message, capabilities: [] };
   }
 }
 
@@ -66,18 +67,35 @@ export async function discoverInventory(ctx = {}) {
   const { env = process.env, fetch: fetchFn = globalThis.fetch } = ctx;
   const token = getToken(env);
   const tp = teamParam(env);
-  const projectsUrl = tp
+  const firstUrl = tp
     ? `${VERCEL_BASE}/v9/projects?limit=50&${tp}`
     : `${VERCEL_BASE}/v9/projects?limit=50`;
-  const res = await fetchFn(projectsUrl, { headers: vercelHeaders(token) });
-  if (!res.ok) throw new Error(`Vercel projects API ${res.status}`);
-  const data = await res.json();
-  return (data.projects || []).map((p) => ({
+
+  const projects = [];
+  let url = firstUrl;
+  while (url) {
+    const res = await fetchFn(url, { headers: vercelHeaders(token) });
+    if (!res.ok) throw new Error(`Vercel projects API ${res.status}`);
+    const data = await res.json();
+    projects.push(...(data.projects || []));
+    // Follow pagination.next cursor until exhausted.
+    const next = data.pagination?.next;
+    if (next) {
+      url = tp
+        ? `${VERCEL_BASE}/v9/projects?until=${next}&${tp}`
+        : `${VERCEL_BASE}/v9/projects?until=${next}`;
+    } else {
+      url = null;
+    }
+  }
+
+  return projects.map((p) => ({
     provider: 'vercel',
     serviceCategory: 'deployment',
-    externalId: p.id,
+    object_type: 'project',
+    external_id: p.id,
     name: p.name,
-    meta: {
+    metadata: {
       framework: p.framework || null,
       latestDeploymentUrl: p.latestDeployments?.[0]?.url || null,
       productionUrl: p.targets?.production?.alias?.[0] || null,

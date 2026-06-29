@@ -16,7 +16,7 @@ function fakeFetch(responses) {
   };
 }
 
-test('verifyConnection: valid credentials → verified', async () => {
+test('verifyConnection: valid credentials → verified with capabilities array', async () => {
   const fetch = fakeFetch([{ json: { account: [{ accountId: '123', name: 'Anchor GTM' }] } }]);
   const r = await verifyConnection({
     env: { GTM_SERVICE_ACCOUNT_KEY: '{"type":"service_account"}' },
@@ -25,7 +25,8 @@ test('verifyConnection: valid credentials → verified', async () => {
   });
   assert.equal(r.status, 'verified');
   assert.ok(r.detail.includes('1 account'), `detail: ${r.detail}`);
-  assert.equal(r.capabilities['container.list'], true);
+  assert.ok(Array.isArray(r.capabilities), 'capabilities should be an array');
+  assert.ok(r.capabilities.includes('container.list'));
 });
 
 test('verifyConnection: missing key → missing (no token call, no fetch call)', async () => {
@@ -75,7 +76,7 @@ test('listCapabilities: returns gtm capability map', async () => {
   assert.equal(caps['variables.list'], true);
 });
 
-test('discoverInventory: maps accounts + containers to inventory rows', async () => {
+test('discoverInventory: maps accounts + containers to canonical inventory rows', async () => {
   // Put more-specific '/containers' first so it matches container URLs before the
   // accounts entry (which would also match since container URLs contain '/accounts/123/containers').
   const fetch = fakeFetch([
@@ -96,11 +97,12 @@ test('discoverInventory: maps accounts + containers to inventory rows', async ()
   const r = rows[0];
   assert.equal(r.provider, 'gtm');
   assert.equal(r.serviceCategory, 'measurement');
-  assert.equal(r.externalId, 'abc456');
+  assert.equal(r.object_type, 'container');
+  assert.equal(r.external_id, 'abc456');
   assert.equal(r.name, 'Anchor Main');
-  assert.equal(r.meta.publicId, 'GTM-ABCDE');
-  assert.equal(r.meta.accountName, 'Anchor GTM');
-  assert.deepEqual(r.meta.usageContext, ['WEB']);
+  assert.equal(r.metadata.publicId, 'GTM-ABCDE');
+  assert.equal(r.metadata.accountName, 'Anchor GTM');
+  assert.deepEqual(r.metadata.usageContext, ['WEB']);
 });
 
 test('discoverInventory: account with no containers contributes no rows', async () => {

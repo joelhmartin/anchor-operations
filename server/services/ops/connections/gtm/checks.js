@@ -7,8 +7,9 @@
  *
  * Verifies that the GTM container is accessible and has published tags.
  * Credential: GTM_SERVICE_ACCOUNT_KEY (same as the connector).
- * ctx shape: { clientUserId, env?, fetch?, getAccessToken? }
+ * ctx shape: { clientUserId, env?, fetch?, getAccessToken?, config? }
  *   All non-clientUserId fields are injectable for tests.
+ *   ctx.config: { gtmContainerId?, gtmAccountPath? } — per-check settings from runExecutor.
  */
 
 import { getCredential } from '../../credentialStore.js';
@@ -35,18 +36,21 @@ export async function handleContainerHealth(ctx) {
     env: ctxEnv,
     fetch: fetchFn = globalThis.fetch,
     getAccessToken,
-    gtmContainerId,
-    gtmAccountPath
+    config = {}
   } = ctx;
+  // Per-check target IDs come from ctx.config (set by runExecutor), not from ctx directly.
+  let { gtmContainerId, gtmAccountPath } = config;
 
-  // Resolve env: injected ctx.env wins, else load credential from DB.
-  let env = ctxEnv;
-  if (!env || !env.GTM_SERVICE_ACCOUNT_KEY) {
+  // Resolve env: injected ctx.env wins, else fall back to process.env (agency credentials).
+  let env = ctxEnv ?? process.env;
+  if (!env.GTM_SERVICE_ACCOUNT_KEY) {
     const cred = await getCredential(clientUserId, 'gtm').catch(() => null);
-    if (!cred) {
+    // self_serve_oauth credentials are decrypted via resolveSecret(); agency sources use process.env (already checked above).
+    const secret = cred?.resolveSecret?.() ?? '';
+    if (!secret) {
       return { status: 'skipped', severity: null, payload: { reason: 'no GTM credential configured for this client (platform: gtm)' } };
     }
-    env = { GTM_SERVICE_ACCOUNT_KEY: cred.secret_value };
+    env = { ...env, GTM_SERVICE_ACCOUNT_KEY: secret };
   }
 
   const getToken = getAccessToken || defaultGetAccessToken;
@@ -61,10 +65,7 @@ export async function handleContainerHealth(ctx) {
 
   try {
     // If injected container path provided (test or pre-resolved), use it directly.
-    let accountPath = gtmAccountPath;
-    let containerId = gtmContainerId;
-
-    if (!accountPath || !containerId) {
+    if (!gtmAccountPath || !gtmContainerId) {
       // Discover first visible account and container.
       const accRes = await fetchFn(`${GTM_BASE}/accounts`, { headers });
       if (!accRes.ok) {
@@ -75,9 +76,9 @@ export async function handleContainerHealth(ctx) {
       if (!accounts.length) {
         return { status: 'warn', severity: 'low', payload: { message: 'No GTM accounts visible for this credential' } };
       }
-      accountPath = accounts[0].path;
+      gtmAccountPath = accounts[0].path;
 
-      const conRes = await fetchFn(`${GTM_BASE}/${accountPath}/containers`, { headers });
+      const conRes = await fetchFn(`${GTM_BASE}/${gtmAccountPath}/containers`, { headers });
       if (!conRes.ok) {
         return { status: 'skipped', severity: null, payload: { reason: `GTM containers API ${conRes.status}` } };
       }
@@ -86,20 +87,20 @@ export async function handleContainerHealth(ctx) {
       if (!containers.length) {
         return { status: 'warn', severity: 'low', payload: { message: 'No GTM containers found in first account' } };
       }
-      containerId = containers[0].containerId;
-      accountPath = `accounts/${containers[0].accountId || accounts[0].accountId}`;
+      gtmContainerId = containers[0].containerId;
+      gtmAccountPath = `accounts/${containers[0].accountId || accounts[0].accountId}`;
     }
 
     // Fetch published workspace / live tags via versions endpoint.
     const liveRes = await fetchFn(
-      `${GTM_BASE}/${accountPath}/containers/${containerId}/versions:live`,
+      `${GTM_BASE}/${gtmAccountPath}/containers/${gtmContainerId}/versions:live`,
       { headers }
     );
     if (!liveRes.ok) {
       return {
         status: 'warn',
         severity: 'medium',
-        payload: { containerId, message: `Could not fetch live version (HTTP ${liveRes.status}) — container may have no published version` }
+        payload: { containerId: gtmContainerId, message: `Could not fetch live version (HTTP ${liveRes.status}) — container may have no published version` }
       };
     }
     const liveData = await liveRes.json();
@@ -110,14 +111,14 @@ export async function handleContainerHealth(ctx) {
       return {
         status: 'warn',
         severity: 'medium',
-        payload: { containerId, tagCount, triggerCount, message: 'GTM container has no published tags' }
+        payload: { containerId: gtmContainerId, tagCount, triggerCount, message: 'GTM container has no published tags' }
       };
     }
 
     return {
       status: 'pass',
       severity: null,
-      payload: { containerId, tagCount, triggerCount, message: `GTM container healthy — ${tagCount} tag(s), ${triggerCount} trigger(s) published` }
+      payload: { containerId: gtmContainerId, tagCount, triggerCount, message: `GTM container healthy — ${tagCount} tag(s), ${triggerCount} trigger(s) published` }
     };
   } catch (err) {
     return { status: 'error', severity: 'high', payload: { message: err.message } };
