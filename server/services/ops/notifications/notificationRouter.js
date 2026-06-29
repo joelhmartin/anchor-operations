@@ -118,9 +118,9 @@ export async function sendApprovalNeeded({ clientUserId, actionRecommendationId 
   let rec;
   try {
     const { rows } = await queryFn(
-      `SELECT id, action_type, risk_level, summary
+      `SELECT id, abstract_action_type AS action_type, risk_tier AS risk_level, summary
          FROM ops_action_recommendations
-        WHERE id = $1 AND status = 'pending' LIMIT 1`,
+        WHERE id = $1 AND status = 'proposed' LIMIT 1`,
       [actionRecommendationId]
     );
     rec = rows[0];
@@ -152,7 +152,7 @@ export async function sendActionResult({ clientUserId, actionRecommendationId, o
   let actionType = 'action';
   try {
     const { rows } = await queryFn(
-      `SELECT action_type FROM ops_action_recommendations WHERE id = $1 LIMIT 1`,
+      `SELECT abstract_action_type AS action_type FROM ops_action_recommendations WHERE id = $1 LIMIT 1`,
       [actionRecommendationId]
     );
     actionType = rows[0]?.action_type || 'action';

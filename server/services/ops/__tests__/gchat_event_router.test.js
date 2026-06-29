@@ -77,3 +77,13 @@ test('unknown event type returns empty text silently', async () => {
   const result = await routeEvent({ type: 'UNKNOWN_TYPE' }, { verifyToken: async () => null });
   assert.equal(result.text, '');
 });
+
+test('JWT verification failure returns empty text (auth rejected)', async () => {
+  const event = { type: 'MESSAGE', message: { text: '/anchorops help', sender: { name: 'users/123' } } };
+  const result = await routeEvent(event, {
+    verifyToken: async () => { throw new Error('Missing Authorization header'); },
+    resolveUser: fakeResolve(knownUser),
+    handleCommandFn: fakeHandle({ text: 'Help text' })
+  });
+  assert.equal(result.text, '');
+});

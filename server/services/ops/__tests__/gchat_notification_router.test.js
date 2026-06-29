@@ -78,3 +78,26 @@ test('sendApprovalNeeded: degrades gracefully when F4 table missing', async () =
   assert.equal(result.skipped, true);
   assert.equal(result.reason, 'f4_not_built');
 });
+
+test('sendApprovalNeeded: uses abstract_action_type and risk_tier columns (proposed status)', async () => {
+  let capturedSql = null;
+  const result = await sendApprovalNeeded(
+    { clientUserId: 'c', actionRecommendationId: 'ar-1' },
+    {
+      resolveWebhookUrl: async () => 'https://x',
+      sendFn: async () => ({ sent: true }),
+      queryFn: async (sql, params) => {
+        if (sql.includes('ops_action_recommendations')) {
+          capturedSql = sql;
+          return { rows: [{ id: 'ar-1', action_type: 'adjust_budget', risk_level: 'medium', summary: 'Bump budget' }] };
+        }
+        if (sql.includes('users')) return { rows: [{ display_name: 'ACME' }] };
+        return { rows: [] };
+      }
+    }
+  );
+  assert.ok(capturedSql, 'queried ops_action_recommendations');
+  assert.ok(capturedSql.includes('abstract_action_type'), 'uses abstract_action_type column');
+  assert.ok(capturedSql.includes('risk_tier'), 'uses risk_tier column');
+  assert.ok(capturedSql.includes("status = 'proposed'"), "queries proposed status");
+});

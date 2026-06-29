@@ -68,7 +68,16 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
           return { text: 'No client runs found for your account yet.' };
         }
         const results = await Promise.allSettled(
-          clientIds.map((cid) => sendDailyDigestFn({ clientUserId: cid, runId: null }, { queryFn }))
+          clientIds.map(async (cid) => {
+            // Load latest completed run for this client; skip if none found.
+            const { rows: runRows } = await queryFn(
+              `SELECT id FROM ops_runs WHERE client_user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+              [cid]
+            );
+            const runId = runRows[0]?.id || null;
+            if (!runId) return { skipped: true, reason: 'no_runs' };
+            return sendDailyDigestFn({ clientUserId: cid, runId }, { queryFn });
+          })
         );
         const sent = results.filter((r) => r.status === 'fulfilled' && r.value?.sent).length;
         return { text: `Daily digest triggered for ${sent}/${clientIds.length} client(s).` };
@@ -122,7 +131,7 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         let pendingApprovals = 0;
         try {
           const { rows: ar } = await queryFn(
-            `SELECT COUNT(*) AS cnt FROM ops_action_recommendations WHERE client_user_id = $1 AND status = 'pending'`,
+            `SELECT COUNT(*) AS cnt FROM ops_action_recommendations WHERE client_user_id = $1 AND status = 'proposed'`,
             [client.id]
           );
           pendingApprovals = Number(ar[0]?.cnt) || 0;
@@ -169,12 +178,12 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         let recs = [];
         try {
           const { rows } = await queryFn(
-            `SELECT ar.id, ar.action_type, ar.risk_level, ar.summary,
+            `SELECT ar.id, ar.abstract_action_type AS action_type, ar.risk_tier AS risk_level, ar.summary,
                     COALESCE(cp.business_name, u.name) AS client_name
                FROM ops_action_recommendations ar
                LEFT JOIN users u ON u.id = ar.client_user_id
                LEFT JOIN client_profiles cp ON cp.user_id = ar.client_user_id
-              WHERE ar.status = 'pending'
+              WHERE ar.status = 'proposed'
               ORDER BY ar.created_at DESC LIMIT 10`
           );
           recs = rows;

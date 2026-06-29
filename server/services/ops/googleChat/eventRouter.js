@@ -60,10 +60,11 @@ async function handleCardClicked(event, deps) {
   }
 
   // HARD: reload action from DB — never trust card payload
+  const FINAL_STATUSES = new Set(['executed', 'rejected', 'failed', 'blocked', 'superseded']);
   let rec;
   try {
     const { rows } = await queryFn(
-      `SELECT id, client_user_id, action_type, risk_level, summary, status
+      `SELECT id, client_user_id, abstract_action_type AS action_type, risk_tier AS risk_level, summary, status
          FROM ops_action_recommendations
         WHERE id = $1 LIMIT 1`,
       [actionId]
@@ -75,20 +76,18 @@ async function handleCardClicked(event, deps) {
   }
 
   if (!rec) return renderErrorCard('Action not found.');
-  if (rec.status !== 'pending') {
+  if (FINAL_STATUSES.has(rec.status)) {
     return { text: `This action has already been ${rec.status}. No changes made.` };
   }
 
   const newStatus = verb === 'approve' ? 'approved' : 'rejected';
   try {
+    // Use decided_at — the actual F4 schema column (no approved_by/rejected_by/approved_at/rejected_at).
     await queryFn(
       `UPDATE ops_action_recommendations
-          SET status = $2,
-              ${verb === 'approve' ? 'approved_by' : 'rejected_by'} = $3,
-              ${verb === 'approve' ? 'approved_at' : 'rejected_at'} = now(),
-              updated_at = now()
-        WHERE id = $1 AND status = 'pending'`,
-      [rec.id, newStatus, anchorUser.id]
+          SET status = $2, decided_at = now(), updated_at = now()
+        WHERE id = $1 AND status NOT IN ('executed','rejected','failed','blocked','superseded')`,
+      [rec.id, newStatus]
     );
   } catch (err) {
     console.warn(`[gchat/event] failed to ${verb} action ${rec.id}: ${err.message}`);
@@ -144,6 +143,15 @@ export async function routeEvent(event, deps = {}) {
     queryFn = query,
     req = null
   } = deps;
+
+  // Verify Google-signed OIDC JWT before any event handling.
+  // In production req is the HTTP request object; in tests verifyToken is injected as a mock.
+  try {
+    await verifyToken(req);
+  } catch (err) {
+    console.warn(`[gchat/event] JWT verification failed: ${err.message}`);
+    return { text: '' };
+  }
 
   const eventType = event?.type;
 
