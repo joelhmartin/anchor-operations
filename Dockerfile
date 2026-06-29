@@ -17,14 +17,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Vendored Yarn (.yarn/releases) invoked directly — the build never depends on
+# corepack downloading Yarn at build time. That download failing in a constrained
+# environment is what forced an npm fallback and drifted the lockfile.
 COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn/releases ./.yarn/releases
 
-RUN corepack enable \
-  && yarn install --immutable
+RUN node .yarn/releases/yarn-4.10.3.cjs install --immutable
 
 COPY . .
 
-RUN yarn build
+RUN node .yarn/releases/yarn-4.10.3.cjs build
 
 FROM node:20-bullseye-slim AS production
 

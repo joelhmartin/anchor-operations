@@ -56,3 +56,4 @@ data/*.sql
 
 # Claude harness runtime locks
 .claude/scheduled_tasks.lock
+package-lock.json
