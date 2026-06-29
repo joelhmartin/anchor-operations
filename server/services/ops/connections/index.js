@@ -1,8 +1,10 @@
 /**
- * Public surface of the connection/capability/asset foundation (F1).
- * Future phases (F2+) import connectors + stores from here.
+ * Public surface of the connection/capability/asset foundation (F1 + F2).
+ * Inventory connectors (F2) are exported here so the executor/orchestrator
+ * can iterate them without touching internal provider paths.
  */
 export { registerConnector, getConnector, getConnectorByCategoryProvider, listConnectors } from './registry.js';
+export { INVENTORY_CONNECTORS } from './providers/index.js';
 export { validateConnector, assertValidConnector, CONNECTION_TYPES } from './types/contract.js';
 export {
   upsertConnection, getConnection, listConnectionsForClient, setConnectionStatus,
