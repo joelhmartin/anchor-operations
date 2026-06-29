@@ -25,6 +25,18 @@ export function propertyType(siteUrl) {
  * @param {string|null} [exactConfig] - If client has a specific sc_site_url configured
  * @returns {{ siteUrl: string|null, permissionLevel: string|null, matchType: string, confidence: number }}
  */
+function normalizeSiteUrl(siteUrl) {
+  if (typeof siteUrl !== 'string' || siteUrl.startsWith('sc-domain:')) return siteUrl;
+  try {
+    const u = new URL(siteUrl);
+    u.hostname = u.hostname.toLowerCase();
+    if (!u.pathname.endsWith('/')) u.pathname = `${u.pathname}/`;
+    return u.toString();
+  } catch {
+    return siteUrl;
+  }
+}
+
 export function matchProperty(websiteUrl, siteList = [], exactConfig = null) {
   const index = new Map(siteList.map((s) => [s.siteUrl, s]));
 
@@ -36,7 +48,7 @@ export function matchProperty(websiteUrl, siteList = [], exactConfig = null) {
 
   // 1. exact_config — client has told us exactly which property to use
   if (exactConfig) {
-    const r = hit(exactConfig, 'exact_config');
+    const r = hit(normalizeSiteUrl(exactConfig), 'exact_config');
     if (r) return r;
   }
 

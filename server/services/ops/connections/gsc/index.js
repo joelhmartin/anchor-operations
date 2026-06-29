@@ -37,6 +37,10 @@ const connector = {
       if (!matched) {
         return { status: 'degraded', detail: `Authenticated (${sites.length} site(s) accessible) but no property matched to client website`, capabilities: ['read'] };
       }
+      const accessible = new Set(sites.map((s) => s.siteUrl));
+      if (!accessible.has(matched.site_url)) {
+        return { status: 'degraded', detail: `Authenticated, but cached property ${matched.site_url} is no longer accessible`, capabilities: ['read'] };
+      }
       return { status: 'verified', detail: `Property ${matched.site_url} accessible (${matched.permission_level})`, capabilities: ['read'] };
     } catch (err) {
       return { status: 'failed', detail: err.message, capabilities: [] };

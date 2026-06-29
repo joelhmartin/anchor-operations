@@ -42,8 +42,8 @@ test('discoverAndPersist sanitizes rows, builds scope, and persists', async () =
   assert.ok(captured.rows[0].name.includes('[REDACTED]'));
 });
 
-test('INVENTORY_CONNECTORS exports 7 connectors with discoverInventory', () => {
-  assert.equal(INVENTORY_CONNECTORS.length, 7);
+test('INVENTORY_CONNECTORS exports 8 connectors with discoverInventory', () => {
+  assert.equal(INVENTORY_CONNECTORS.length, 8);
   for (const c of INVENTORY_CONNECTORS) {
     assert.ok(typeof c.id === 'string' && c.id, `${c.id ?? '?'} has id`);
     assert.ok(typeof c.discoverInventory === 'function', `${c.id} has discoverInventory`);
@@ -68,6 +68,6 @@ test('runAllInventoryDiscovery calls each connector and returns results array', 
     // ctm: no ctx.clientUserId → returns [] without hitting clients
   };
   const results = await runAllInventoryDiscovery(ctx, { upsert: fakeUpsert });
-  assert.equal(results.length, 7, 'one result per connector');
-  assert.equal(calls, 7, 'upsert called for each connector');
+  assert.equal(results.length, 8, 'one result per connector');
+  assert.equal(calls, 8, 'upsert called for each connector');
 });

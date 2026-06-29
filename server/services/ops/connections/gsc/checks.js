@@ -198,20 +198,20 @@ export function makePageDeclineCheck({
         queryAnalytics(token, matched.site_url, { startDate: startPrior,   endDate: endPrior,   dimensions: ['page'], rowLimit: 1000 }, { signal: ctx.signal })
       ]);
       const priorMap = new Map((prior.rows || []).map((r) => [r.keys[0], r.clicks || 0]));
+      const curMap   = new Map((cur.rows   || []).map((r) => [r.keys[0], r.clicks || 0]));
       const declining = [];
-      for (const r of (cur.rows || [])) {
-        const url = r.keys[0];
-        const priorClicks = priorMap.get(url) || 0;
+      for (const [url, priorClicks] of priorMap) {
         if (priorClicks >= 10) {
-          const pct = dropPct(r.clicks || 0, priorClicks);
-          if (pct > 30) declining.push({ url, current_clicks: r.clicks || 0, prior_clicks: priorClicks, drop_pct: pct });
+          const currentClicks = curMap.get(url) || 0;
+          const pct = dropPct(currentClicks, priorClicks);
+          if (pct > 30) declining.push({ url, current_clicks: currentClicks, prior_clicks: priorClicks, drop_pct: pct });
         }
       }
       if (declining.length) {
         declining.sort((a, b) => b.drop_pct - a.drop_pct);
         return { status: 'fail', severity: 'warning', payload: { declining_pages: declining.slice(0, 20) } };
       }
-      return { status: 'pass', payload: { pages_checked: (cur.rows || []).length } };
+      return { status: 'pass', payload: { pages_checked: priorMap.size } };
     } catch (err) {
       return { status: 'error', severity: 'warning', payload: { error: err.message } };
     }
@@ -244,20 +244,20 @@ export function makeQueryDeclineCheck({
         queryAnalytics(token, matched.site_url, { startDate: startPrior,   endDate: endPrior,   dimensions: ['query'], rowLimit: 1000 }, { signal: ctx.signal })
       ]);
       const priorMap = new Map((prior.rows || []).map((r) => [r.keys[0], r.clicks || 0]));
+      const curMap   = new Map((cur.rows   || []).map((r) => [r.keys[0], r.clicks || 0]));
       const declining = [];
-      for (const r of (cur.rows || [])) {
-        const query = r.keys[0];
-        const priorClicks = priorMap.get(query) || 0;
+      for (const [q, priorClicks] of priorMap) {
         if (priorClicks >= 5) {
-          const pct = dropPct(r.clicks || 0, priorClicks);
-          if (pct > 30) declining.push({ query, current_clicks: r.clicks || 0, prior_clicks: priorClicks, drop_pct: pct });
+          const currentClicks = curMap.get(q) || 0;
+          const pct = dropPct(currentClicks, priorClicks);
+          if (pct > 30) declining.push({ query: q, current_clicks: currentClicks, prior_clicks: priorClicks, drop_pct: pct });
         }
       }
       if (declining.length) {
         declining.sort((a, b) => b.drop_pct - a.drop_pct);
         return { status: 'fail', severity: 'warning', payload: { declining_queries: declining.slice(0, 20) } };
       }
-      return { status: 'pass', payload: { queries_checked: (cur.rows || []).length } };
+      return { status: 'pass', payload: { queries_checked: priorMap.size } };
     } catch (err) {
       return { status: 'error', severity: 'warning', payload: { error: err.message } };
     }
@@ -436,13 +436,13 @@ export function makeDeviceSpecificDropCheck({
       ]);
 
       const priorMap = new Map((prior.rows || []).map((r) => [r.keys[0], r.clicks || 0]));
+      const curMap   = new Map((cur.rows   || []).map((r) => [r.keys[0], r.clicks || 0]));
       const affected = [];
-      for (const r of (cur.rows || [])) {
-        const device = r.keys[0];
-        const priorClicks = priorMap.get(device) || 0;
+      for (const [device, priorClicks] of priorMap) {
         if (priorClicks >= 10) {
-          const pct = dropPct(r.clicks || 0, priorClicks);
-          if (pct > 25) affected.push({ device, current_clicks: r.clicks || 0, prior_clicks: priorClicks, drop_pct: pct });
+          const currentClicks = curMap.get(device) || 0;
+          const pct = dropPct(currentClicks, priorClicks);
+          if (pct > 25) affected.push({ device, current_clicks: currentClicks, prior_clicks: priorClicks, drop_pct: pct });
         }
       }
 

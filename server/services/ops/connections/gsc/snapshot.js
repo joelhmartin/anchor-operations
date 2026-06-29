@@ -109,7 +109,8 @@ export async function collectSnapshot({ clientUserId, siteUrl, token, date, sign
     for (const r of byDevice.rows || []) {
       snapshots.push(makeRow('device', r.keys[0], r));
     }
-  } catch {
+  } catch (err) {
+    if (err?.name === 'AbortError' || signal?.aborted) throw err;
     // Any failure returns whatever was collected so far (may be empty)
     return snapshots;
   }

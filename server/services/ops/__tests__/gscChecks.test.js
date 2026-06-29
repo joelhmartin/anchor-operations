@@ -124,6 +124,22 @@ test('gsc.page_decline: fail when a page drops > 30% in clicks', async () => {
   assert.ok(r.payload.declining_pages[0].drop_pct >= 80);
 });
 
+test('gsc.page_decline: detects page that disappears entirely from current results', async () => {
+  let n = 0;
+  const queryAnalytics = async () => {
+    n += 1;
+    // current (n=1): page gone (zero rows); prior (n=2): 200 clicks
+    if (n === 1) return { rows: [] };
+    return { rows: [{ keys: ['/dropped/'], clicks: 200, impressions: 5000, ctr: 0.04, position: 6 }] };
+  };
+  const h = makePageDeclineCheck({ resolveToken: async () => 'tok', getMatchedSite: async () => SITE, queryAnalytics });
+  const r = await h(CTX);
+  assert.equal(r.status, 'fail');
+  assert.equal(r.payload.declining_pages[0].url, '/dropped/');
+  assert.equal(r.payload.declining_pages[0].current_clicks, 0);
+  assert.equal(r.payload.declining_pages[0].drop_pct, 100);
+});
+
 // ── query_decline ─────────────────────────────────────────────────────────────
 
 test('gsc.query_decline: fail when a query drops > 30% in clicks', async () => {

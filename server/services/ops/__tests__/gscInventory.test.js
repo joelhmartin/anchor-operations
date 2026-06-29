@@ -24,9 +24,9 @@ test('discoverInventory returns ops_platform_inventory-shaped row for best match
   assert.equal(row.provider, 'search_console');
   assert.equal(row.object_type, 'site');
   assert.equal(row.external_id, 'sc-domain:example.com');
-  assert.equal(row.attributes_json.match_type, 'sc_domain');
-  assert.ok(row.attributes_json.match_confidence >= 0.9);
-  assert.equal(row.attributes_json.property_type, 'domain');
+  assert.equal(row.metadata.match_type, 'sc_domain');
+  assert.ok(row.metadata.match_confidence >= 0.9);
+  assert.equal(row.metadata.property_type, 'domain');
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].external_id, 'sc-domain:example.com');
 });
@@ -75,6 +75,7 @@ test('getMatchedSite returns null when cache empty and no live discovery deps', 
 
 // DB round-trip (requires DATABASE_URL)
 test('ops_gsc_site_inventory upsert and read back', async () => {
+  if (!process.env.DATABASE_URL) return;
   const { query } = await import('../../../db.js');
   const uid = '00000000-0000-0000-0001-' + Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0');
   await query(

@@ -46,6 +46,7 @@ test('connector: new gsc.* check IDs are also registered', () => {
   // Pull in the connector to ensure checks.js is loaded
   const NEW_IDS = [
     'gsc.connection_health',
+    'gsc.site_access_missing',
     'gsc.click_drop',
     'gsc.impression_drop',
     'gsc.page_decline',

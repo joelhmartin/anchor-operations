@@ -38,7 +38,7 @@ export async function listSites(token, { signal, _fetch = globalThis.fetch } = {
  */
 async function persistInventoryDefault(rows, queryFn) {
   for (const row of rows) {
-    const a = row.attributes_json;
+    const a = row.metadata;
     await queryFn(
       `INSERT INTO ops_gsc_site_inventory
          (client_user_id, site_url, permission_level, property_type,
@@ -104,7 +104,7 @@ export async function discoverInventory({
     object_type: 'site',
     external_id: match.siteUrl,
     name: match.siteUrl,
-    attributes_json: {
+    metadata: {
       permission_level:  match.permissionLevel,
       property_type:     ptype,
       match_type:        match.matchType,
@@ -130,21 +130,25 @@ export async function getMatchedSite(clientUserId, {
   _listSites = null,
   websiteUrl = null
 } = {}) {
+  const resolvedWebsiteUrl =
+    websiteUrl || await resolveClientWebsiteUrl(_query, clientUserId).catch(() => null);
+
   const { rows } = await _query(
     `SELECT site_url, match_type, match_confidence, permission_level, property_type
        FROM ops_gsc_site_inventory
       WHERE client_user_id = $1
+        AND ($2::text IS NULL OR website_url = $2)
       ORDER BY match_confidence DESC, discovered_at DESC
       LIMIT 1`,
-    [clientUserId]
+    [clientUserId, resolvedWebsiteUrl]
   ).catch(() => ({ rows: [] }));
 
   if (rows[0]) return rows[0];
 
   // Live fallback when caller supplies auth
-  if (!token || !_listSites || !websiteUrl) return null;
+  if (!token || !_listSites) return null;
 
-  const discoveredUrl = websiteUrl || await resolveClientWebsiteUrl(_query, clientUserId);
+  const discoveredUrl = resolvedWebsiteUrl;
   if (!discoveredUrl) return null;
 
   const inventoryRows = await discoverInventory({
@@ -156,12 +160,12 @@ export async function getMatchedSite(clientUserId, {
   });
   if (!inventoryRows.length) return null;
 
-  const a = inventoryRows[0].attributes_json;
+  const m = inventoryRows[0].metadata;
   return {
     site_url:         inventoryRows[0].external_id,
-    match_type:       a.match_type,
-    match_confidence: a.match_confidence,
-    permission_level: a.permission_level,
-    property_type:    a.property_type
+    match_type:       m.match_type,
+    match_confidence: m.match_confidence,
+    permission_level: m.permission_level,
+    property_type:    m.property_type
   };
 }
