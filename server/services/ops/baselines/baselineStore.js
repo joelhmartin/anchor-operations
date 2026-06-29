@@ -17,6 +17,7 @@ export async function loadSnapshotSeries({
     [clientUserId, service, scopeType, scopeId, asOf, metric, lookbackDays]
   );
   return rows
+    .filter((r) => r.value !== null)
     .map((r) => ({ date: r.date, value: Number(r.value) }))
     .filter((r) => Number.isFinite(r.value));
 }

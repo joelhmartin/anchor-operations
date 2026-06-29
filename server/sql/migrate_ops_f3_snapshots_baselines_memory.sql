@@ -74,3 +74,12 @@ CREATE TABLE IF NOT EXISTS ops_agent_memory (
 
 CREATE INDEX IF NOT EXISTS idx_ops_agent_memory_client
   ON ops_agent_memory (client_user_id, status, fact_type);
+
+-- ops_tool_approvals: add client_user_id so loadApprovals can query without a
+-- JOIN on ops_runs (supervisor inserts run_id=NULL for chat-session approvals).
+ALTER TABLE ops_tool_approvals
+  ADD COLUMN IF NOT EXISTS client_user_id UUID;
+
+CREATE INDEX IF NOT EXISTS idx_ops_tool_approvals_client
+  ON ops_tool_approvals (client_user_id)
+  WHERE client_user_id IS NOT NULL;

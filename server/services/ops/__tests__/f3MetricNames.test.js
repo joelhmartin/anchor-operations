@@ -60,3 +60,13 @@ test('deriveMetrics never divides by zero and never invents missing bases', () =
   const out2 = deriveMetrics({ sessions: 10 }); // no ads bases at all
   assert.deepEqual(out2, { sessions: 10 });
 });
+
+test('deriveMetrics strips pre-computed derived keys before recomputing', () => {
+  // Input carries a stale ctr but lacks the bases needed to recompute it.
+  const out = deriveMetrics({ ctr: 0.5 });
+  assert.equal('ctr' in out, false, 'stale derived metric removed when bases are absent');
+
+  // When bases are present, derived metrics are freshly computed (not passthrough).
+  const out2 = deriveMetrics({ impressions: 100, clicks: 10, ctr: 0.99 });
+  assert.equal(out2.ctr, 0.1, 'derived metric recomputed from bases, not passed through');
+});

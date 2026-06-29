@@ -34,10 +34,18 @@ export function scoreAnomaly({ comparison, metric }) {
   const absZ = comparison.z_score === null || comparison.z_score === undefined ? null : Math.abs(comparison.z_score);
   const absPct = comparison.pct_change === null || comparison.pct_change === undefined ? null : Math.abs(comparison.pct_change);
 
-  const severity = severityFor(absZ, absPct);
+  // When baseline is zero and observed is non-zero, pct_change and z_score are
+  // both null (divide-by-zero). Treat an on/off flip as critical so it surfaces.
+  const zeroBaselineFlip =
+    comparison.baseline_value === 0 &&
+    absZ === null && absPct === null &&
+    comparison.delta !== null && comparison.delta !== 0;
+
+  const severity = zeroBaselineFlip ? 'critical' : severityFor(absZ, absPct);
   let score = 0;
   if (absZ !== null) score = clamp01(absZ / Z_THRESHOLDS.critical);
   else if (absPct !== null) score = clamp01(absPct / PCT_THRESHOLDS.critical);
+  else if (zeroBaselineFlip) score = 1;
 
   const dir = comparison.direction;
   const magnitude = absZ !== null ? `z=${round4(comparison.z_score)}` :

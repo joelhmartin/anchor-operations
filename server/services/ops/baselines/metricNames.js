@@ -49,6 +49,7 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
 export function deriveMetrics(metrics = {}) {
   const out = { ...metrics };
+  for (const key of DERIVED_METRICS) delete out[key];
   const { impressions, clicks, conversions, cost_cents } = metrics;
 
   if (Number.isFinite(impressions) && impressions > 0 && Number.isFinite(clicks)) {

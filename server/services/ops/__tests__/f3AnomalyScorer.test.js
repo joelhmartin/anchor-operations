@@ -57,6 +57,18 @@ test('falls back to pct_change when z_score is null', () => {
   assert.equal(info.severity, 'info'); // |pct| >= 0.15
 });
 
+test('zero baseline with non-zero observed is scored critical (on/off flip)', () => {
+  const r = scoreAnomaly({
+    comparison: {
+      comparable: true, baseline_value: 0, delta: 50, pct_change: null,
+      z_score: null, direction: 'up', observed: 50
+    },
+    metric: 'conversions'
+  });
+  assert.equal(r.severity, 'critical');
+  assert.equal(r.score, 1);
+});
+
 test('scoreAcrossPeriods returns the most anomalous period', () => {
   const r = scoreAcrossPeriods({
     metric: 'cost_cents',

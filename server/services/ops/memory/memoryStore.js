@@ -7,20 +7,20 @@ import { query } from '../../../db.js';
 
 export async function upsertMemoryFact({
   clientUserId, scope = 'client', fact_type, fact_key, fact_value = {},
-  confidence = 0.5, source = 'learned'
+  confidence = 0.5, occurrences = 1, source = 'learned'
 }) {
   const { rows } = await query(
     `INSERT INTO ops_agent_memory
        (client_user_id, scope, fact_type, fact_key, fact_value, confidence, occurrences, source)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6,1,$7)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8)
      ON CONFLICT (client_user_id, scope, fact_type, fact_key)
-     DO UPDATE SET occurrences = ops_agent_memory.occurrences + 1,
+     DO UPDATE SET occurrences = GREATEST(ops_agent_memory.occurrences, EXCLUDED.occurrences),
                    last_seen_at = NOW(),
                    fact_value = EXCLUDED.fact_value,
-                   confidence = LEAST(1.0, ops_agent_memory.confidence + 0.1),
+                   confidence = GREATEST(ops_agent_memory.confidence, EXCLUDED.confidence),
                    status = 'active'
      RETURNING *`,
-    [clientUserId, scope, fact_type, fact_key, JSON.stringify(fact_value), confidence, source]
+    [clientUserId, scope, fact_type, fact_key, JSON.stringify(fact_value), confidence, occurrences, source]
   );
   return rows[0];
 }
@@ -38,10 +38,13 @@ export async function getMemory({ clientUserId, scope, factType, status = 'activ
   return rows;
 }
 
-export async function archiveMemoryFact(id) {
+export async function archiveMemoryFact({ id, clientUserId }) {
   const { rows } = await query(
-    `UPDATE ops_agent_memory SET status = 'archived' WHERE id = $1 RETURNING *`,
-    [id]
+    `UPDATE ops_agent_memory
+        SET status = 'archived'
+      WHERE id = $1 AND client_user_id = $2
+      RETURNING *`,
+    [id, clientUserId]
   );
   return rows[0] || null;
 }

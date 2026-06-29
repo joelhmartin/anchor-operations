@@ -12,6 +12,7 @@ test('updateMemoryFromRuns extracts from injected loaders and upserts each fact'
         { tool_name: 'pause_keyword', scope: 'paid_ads', approved_at: 't', executed_at: 't' },
         { tool_name: 'pause_keyword', scope: 'paid_ads', approved_at: 't', executed_at: 't' }
       ],
+      loadRejections: async () => [],
       loadRepeatedFindings: async () => [{ category: 'gads.spike', occurrences: 3, dismissed_count: 3 }],
       loadStableConfigs: async () => [],
       upsertFact: async (fact) => { upserts.push(fact); return { id: `m-${upserts.length}`, ...fact }; }
@@ -27,11 +28,32 @@ test('updateMemoryFromRuns extracts from injected loaders and upserts each fact'
   assert.ok(upserts.some((f) => f.fact_type === 'manual_note'));
 });
 
+test('updateMemoryFromRuns includes rejected_pattern facts from rejections', async () => {
+  const upserts = [];
+  const out = await updateMemoryFromRuns({
+    clientUserId: 'client-2',
+    deps: {
+      loadApprovals: async () => [],
+      loadRejections: async () => [
+        { tool_name: 'increase_budget', scope: 'paid_ads', executed_at: 't' },
+        { tool_name: 'increase_budget', scope: 'paid_ads', executed_at: 't' }
+      ],
+      loadRepeatedFindings: async () => [],
+      loadStableConfigs: async () => [],
+      upsertFact: async (fact) => { upserts.push(fact); return fact; }
+    }
+  });
+  assert.equal(out.extracted, 1);
+  assert.ok(upserts.some((f) => f.fact_type === 'rejected_pattern'));
+  assert.ok(upserts.some((f) => f.fact_key === 'rejected:increase_budget'));
+});
+
 test('updateMemoryFromRuns with no activity upserts nothing', async () => {
   const out = await updateMemoryFromRuns({
     clientUserId: 'client-1',
     deps: {
       loadApprovals: async () => [],
+      loadRejections: async () => [],
       loadRepeatedFindings: async () => [],
       loadStableConfigs: async () => [],
       upsertFact: async () => { throw new Error('should not upsert'); }

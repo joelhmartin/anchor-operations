@@ -26,6 +26,7 @@ export function factsFromApprovals(approvals = []) {
     fact_key: `approved:${v.tool}`,
     fact_value: { tool: v.tool, count: v.count },
     confidence: clamp01(0.5 + 0.1 * v.count),
+    occurrences: v.count,
     source: 'learned'
   }));
 }
@@ -45,6 +46,7 @@ export function factsFromRejections(rejections = []) {
     fact_key: `rejected:${v.tool}`,
     fact_value: { tool: v.tool, count: v.count },
     confidence: clamp01(0.5 + 0.1 * v.count),
+    occurrences: v.count,
     source: 'learned'
   }));
 }
@@ -85,7 +87,7 @@ export function factsFromManualNotes(notes = []) {
   return notes.map((n) => ({
     scope: n.scope || 'client',
     fact_type: 'manual_note',
-    fact_key: n.fact_key || `note:${n.id ?? n.text}`,
+    fact_key: n.fact_key || (n.id != null ? `note:${n.id}` : 'note:unkeyed'),
     fact_value: { text: n.text },
     confidence: 1,
     source: 'manual'
