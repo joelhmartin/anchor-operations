@@ -9,7 +9,8 @@ import publicHttp from './public_http.js';
 import googleAds from './google_ads.js';
 import meta from './meta.js';
 import ctm from './ctm.js';
+import ga4 from '../ga4/index.js';
 
-export const INVENTORY_CONNECTORS = [kinsta, wordpress, publicHttp, googleAds, meta, ctm];
+export const INVENTORY_CONNECTORS = [kinsta, wordpress, publicHttp, googleAds, meta, ctm, ga4];
 
 export default INVENTORY_CONNECTORS;
