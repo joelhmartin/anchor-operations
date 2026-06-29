@@ -10,6 +10,7 @@ import ClientChat from '../Chat/ClientChat';
 import ClientSitesPanel from './ClientSitesPanel';
 import ClientOverview from './ClientOverview';
 import ClientOpsView from './ClientOpsView';
+import ClientAgentProfileEditor from './ClientAgentProfileEditor';
 
 function SectionBody({ section, clientUserId, activeClient, setSection }) {
   switch (section) {
@@ -37,6 +38,8 @@ function SectionBody({ section, clientUserId, activeClient, setSection }) {
           onOpenRun={() => setSection('runs')}
         />
       );
+    case 'agent_profile':
+      return <ClientAgentProfileEditor clientUserId={clientUserId} />;
     default:
       return <EmptyState title="Coming up" message={`The "${section}" section renders here.`} />;
   }
