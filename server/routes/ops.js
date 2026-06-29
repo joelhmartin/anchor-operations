@@ -58,6 +58,7 @@ import { buildRecommendations } from '../services/ops/recommendations/buildRecom
 import { listRecommendations, getRecommendation } from '../services/ops/recommendations/recommendationStore.js';
 import { proposeAction, executeAction, rejectAction } from '../services/ops/actions/executor.js';
 import { routeEvent } from '../services/ops/googleChat/eventRouter.js';
+import { loadResolvedProfile, upsertAgentProfile } from '../services/ops/agentProfileStore.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -1386,6 +1387,97 @@ router.put('/clients/:clientUserId/cap', async (req, res) => {
   } catch (err) {
     console.error('[ops] PUT /clients/:id/cap failed:', err);
     res.status(500).json({ message: 'Failed to update cap' });
+  }
+});
+
+// ---------------- Agent profiles (F8) ----------------
+
+router.get('/clients/:id/agent-profile', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+  try {
+    const profile = await loadResolvedProfile(req.params.id);
+    res.json({ profile });
+  } catch (err) {
+    console.error('[ops] GET /clients/:id/agent-profile failed:', err);
+    res.status(500).json({ message: 'Failed to load agent profile' });
+  }
+});
+
+router.put('/clients/:id/agent-profile', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+
+  // Fetch client_type so we can enforce the HIPAA gate before write.
+  let clientType = null;
+  try {
+    const { rows: cpRows } = await query(
+      'SELECT client_type FROM client_profiles WHERE user_id = $1',
+      [req.params.id]
+    );
+    clientType = cpRows[0]?.client_type || null;
+  } catch (err) {
+    console.warn('[ops] agent-profile PUT: client_type fetch failed:', err?.message);
+  }
+
+  const {
+    enabled,
+    client_name,
+    website_url,
+    hipaa_restricted,
+    primary_services_json,
+    target_cpa_cents,
+    daily_budget_expected_cents,
+    monthly_budget_expected_cents,
+    lead_goal_monthly,
+    allowed_platforms_json,
+    auto_action_policy_json,
+    notification_policy_json,
+    google_chat_policy_json,
+    agent_notes
+  } = req.body || {};
+
+  // HIPAA gate (never weakened): medical clients must always be hipaa_restricted.
+  const effectiveHipaaRestricted = clientType === 'medical' ? true : Boolean(hipaa_restricted);
+
+  const intOrNull = (v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  try {
+    await upsertAgentProfile(req.params.id, {
+      enabled: Boolean(enabled),
+      client_name: client_name != null ? String(client_name).slice(0, 200) : null,
+      website_url: website_url != null ? String(website_url).slice(0, 500) : null,
+      hipaa_restricted: effectiveHipaaRestricted,
+      primary_services_json: Array.isArray(primary_services_json) ? primary_services_json : [],
+      target_cpa_cents: intOrNull(target_cpa_cents),
+      daily_budget_expected_cents: intOrNull(daily_budget_expected_cents),
+      monthly_budget_expected_cents: intOrNull(monthly_budget_expected_cents),
+      lead_goal_monthly: intOrNull(lead_goal_monthly),
+      allowed_platforms_json: Array.isArray(allowed_platforms_json) ? allowed_platforms_json : [],
+      auto_action_policy_json: (auto_action_policy_json && typeof auto_action_policy_json === 'object' && !Array.isArray(auto_action_policy_json))
+        ? auto_action_policy_json
+        : { mode: 'off', max_risk_level: 'low' },
+      notification_policy_json: (notification_policy_json && typeof notification_policy_json === 'object' && !Array.isArray(notification_policy_json))
+        ? notification_policy_json
+        : { email: true, digest_frequency: 'weekly' },
+      google_chat_policy_json: (google_chat_policy_json && typeof google_chat_policy_json === 'object' && !Array.isArray(google_chat_policy_json))
+        ? google_chat_policy_json
+        : { enabled: false, space_id: null },
+      agent_notes: agent_notes != null ? String(agent_notes).slice(0, 2000) : null
+    });
+
+    const profile = await loadResolvedProfile(req.params.id);
+    res.json({ profile });
+  } catch (err) {
+    console.error('[ops] PUT /clients/:id/agent-profile failed:', err);
+    res.status(500).json({ message: 'Failed to update agent profile' });
   }
 });
 
