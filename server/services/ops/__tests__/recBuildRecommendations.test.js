@@ -21,7 +21,7 @@ test('buildRecommendations runs the deterministic pipeline + single LLM call per
   let llmCalls = 0;
   const out = await buildRecommendations({ clientUserId: 'c1', runId: 'r1' }, {
     loadFindings: async () => findings,
-    baselineLookup: async () => ({ mean: 10, stdev: 2, n: 30 }), // present → baselineDelta computed
+    baselineLookup: async () => ({ baseline_value: 10, stddev: 2, n: 30 }), // present → baselineDelta computed (F3 schema)
     policyContext: async () => ({ clientType: 'standard', mutationsEnabled: false, monthlyCapCents: 500 }),
     summarize: async (group) => { llmCalls += 1; return { title: `T:${group.category}`, summary: 's', rationale: 'r', priority: 5 }; },
     store
@@ -55,6 +55,41 @@ test('destructive-style critical on a medical client → blocked or admin, persi
   const rec = store.saved[0];
   assert.equal(rec.approvalLevel, 'admin_required'); // medical escalates approval_required → admin_required
   assert.ok(['proposed'].includes(rec.status));
+});
+
+test('F3 baseline_value/stddev fields produce non-null baselineDelta in riskScore', async () => {
+  const store = fakeStore();
+  const capturedInputs = [];
+  await buildRecommendations({ clientUserId: 'c1', runId: 'r1' }, {
+    loadFindings: async () => [
+      { id: 'f1', client_user_id: 'c1', run_id: 'r1', severity: 'critical',
+        category: 'correlation.gtm_missing_with_kinsta_drift', summary: 'GTM missing',
+        affected_platforms: ['website'], business_impact: null, attention_score: 15, created_at: new Date() }
+    ],
+    baselineLookup: async () => ({ baseline_value: 10, stddev: 2, sample_count: 30 }),
+    policyContext: async () => ({ clientType: 'standard', mutationsEnabled: false }),
+    summarize: async (group, computed) => { capturedInputs.push(computed); return { title: 't', summary: 's', rationale: 'r', priority: 1 }; },
+    store
+  });
+  assert.ok(capturedInputs[0].baselineDelta !== null, 'baselineDelta should be non-null with F3 baseline');
+  assert.ok(capturedInputs[0].baselineDelta > 0, 'delta = (15-10)/2 = 2.5');
+});
+
+test('old mean/stdev shape produces null baselineDelta (legacy shape rejected)', async () => {
+  const store = fakeStore();
+  const capturedInputs = [];
+  await buildRecommendations({ clientUserId: 'c1', runId: 'r1' }, {
+    loadFindings: async () => [
+      { id: 'f1', client_user_id: 'c1', run_id: 'r1', severity: 'critical',
+        category: 'correlation.gtm_missing_with_kinsta_drift', summary: 'GTM missing',
+        affected_platforms: ['website'], business_impact: null, attention_score: 15, created_at: new Date() }
+    ],
+    baselineLookup: async () => ({ mean: 10, stdev: 2 }), // wrong field names → neutral
+    policyContext: async () => ({ clientType: 'standard', mutationsEnabled: false }),
+    summarize: async (group, computed) => { capturedInputs.push(computed); return { title: 't', summary: 's', rationale: 'r', priority: 1 }; },
+    store
+  });
+  assert.equal(capturedInputs[0].baselineDelta, null, 'wrong field names → null (neutral)');
 });
 
 test('no findings → no recommendations, no LLM calls', async () => {

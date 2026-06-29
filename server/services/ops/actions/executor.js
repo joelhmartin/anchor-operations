@@ -34,9 +34,11 @@ async function defaultFinalizeApproval(approvalId, payload) {
 
 async function defaultCapabilities(clientUserId) {
   try {
-    const mod = await import('../connections/registry.js'); // F1
-    if (typeof mod.loadCapabilities === 'function') return await mod.loadCapabilities(clientUserId);
-  } catch { /* F1 not present yet */ }
+    const { listConnectionsForClient } = await import('../connections/connectionStore.js');
+    const conns = await listConnectionsForClient(clientUserId);
+    // resolveAction expects [{provider, capabilities: [...]}] — connectionStore serializes this shape already.
+    return conns.map(c => ({ provider: c.provider, capabilities: c.capabilities || [] }));
+  } catch { /* DB unavailable or F1 not migrated yet */ }
   return [];
 }
 
@@ -65,6 +67,11 @@ export async function executeAction({ recommendationId, userId, actorIsAdmin = t
 
   const rec = await getRecommendation(recommendationId);
   if (!rec) return { ok: false, status: 'failed', error: 'recommendation not found' };
+
+  const FINAL_STATUSES = ['executed', 'rejected', 'failed', 'blocked'];
+  if (FINAL_STATUSES.includes(rec.status)) {
+    return { ok: false, status: rec.status, error: `recommendation already ${rec.status}` };
+  }
 
   const norm = {
     abstractActionType: rec.abstract_action_type,

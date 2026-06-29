@@ -31,10 +31,11 @@ async function defaultLoadFindings(clientUserId, runId) {
 async function defaultBaselineLookup() { return null; }
 
 function computeBaselineDelta(baseline, finding) {
-  if (!baseline || !Number.isFinite(baseline.stdev) || baseline.stdev <= 0) return null;
+  // F3 stores baseline_value (mean) and stddev — align with ops_metric_baselines schema.
+  if (!baseline || !Number.isFinite(baseline.stddev) || baseline.stddev <= 0) return null;
   const observed = Number(finding.attention_score);
   if (!Number.isFinite(observed)) return null;
-  return Math.max(0, (observed - baseline.mean) / baseline.stdev);
+  return Math.max(0, (observed - baseline.baseline_value) / baseline.stddev);
 }
 
 export async function buildRecommendations({ clientUserId, runId = null }, deps = {}) {

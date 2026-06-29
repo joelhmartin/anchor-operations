@@ -1804,6 +1804,11 @@ router.post('/recommendations/:recId/approve', async (req, res) => {
     const rec = await getRecommendation(req.params.recId);
     if (!rec) return res.status(404).json({ message: 'Recommendation not found' });
     if (!(await isOperationsClient(rec.client_user_id))) return res.status(404).json({ message: 'Client account not found' });
+    // Reject requests on already-finalized recommendations to prevent double-execution.
+    const FINAL_STATUSES = ['executed', 'rejected', 'failed', 'blocked'];
+    if (FINAL_STATUSES.includes(rec.status)) {
+      return res.status(409).json({ error: 'recommendation_already_finalized', status: rec.status });
+    }
     // Ensure an approval row exists (mutating recs), then execute as an admin actor.
     if (!rec.approval_id && rec.mutating && rec.abstract_action_type) {
       await proposeAction({ recommendationId: rec.id, userId: req.user?.id });

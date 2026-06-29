@@ -81,6 +81,27 @@ test('connector.execute throwing → failed + tool_executed(success=false)', asy
   assert.equal(executed[1].success, false);
 });
 
+test('capabilities loaded from connectionStore shape flows to resolveAction', async () => {
+  const h = harness();
+  let capsSeen;
+  h.deps.resolve = async (type, { capabilities }) => { capsSeen = capabilities; return { ok: false, reason: 'test' }; };
+  h.deps.capabilities = async () => [{ provider: 'kinsta', capabilities: ['clear_cache'] }];
+  await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+  assert.deepEqual(capsSeen, [{ provider: 'kinsta', capabilities: ['clear_cache'] }]);
+});
+
+test('executeAction: finalized status is not re-executable (executor-level defense)', async () => {
+  for (const finalStatus of ['executed', 'rejected', 'failed']) {
+    const h = harness({ status: finalStatus });
+    let executed = false;
+    h.connector.actions.execute = async () => { executed = true; return {}; };
+    const out = await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+    assert.equal(out.ok, false, `status=${finalStatus}: ok must be false`);
+    assert.equal(out.status, finalStatus, `status=${finalStatus}: returned status echoed`);
+    assert.equal(executed, false, `status=${finalStatus}: connector not called`);
+  }
+});
+
 test('rejectAction sets rejected + emits tool_rejected', async () => {
   const h = harness();
   let saved;
