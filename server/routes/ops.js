@@ -57,10 +57,24 @@ import { loadHomeDigest } from '../services/ops/homeDigest.js';
 import { buildRecommendations } from '../services/ops/recommendations/buildRecommendations.js';
 import { listRecommendations, getRecommendation } from '../services/ops/recommendations/recommendationStore.js';
 import { proposeAction, executeAction, rejectAction } from '../services/ops/actions/executor.js';
+import { routeEvent } from '../services/ops/googleChat/eventRouter.js';
 
 const blogUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = express.Router();
+
+// Google Chat App events — verified by Google-signed OIDC JWT inside routeEvent.
+// Must be mounted BEFORE requireAuth (Google Chat does not send session cookies).
+router.post('/chat/google/events', async (req, res) => {
+  try {
+    const result = await routeEvent(req.body, { req });
+    res.json(result);
+  } catch (err) {
+    console.warn(`[ops/gchat] event route error: ${err?.message || err}`);
+    // Return 200 with a neutral text — Chat requires 200 even for errors.
+    res.json({ text: 'An internal error occurred.' });
+  }
+});
 
 // `/internal/*` routes are invoked by Cloud Scheduler with an OIDC bearer; they
 // must NOT pass through the admin requireAuth middleware. Mount them before the
