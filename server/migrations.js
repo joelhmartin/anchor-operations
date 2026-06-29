@@ -41,7 +41,8 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_service_connections.sql',
   'migrate_ops_platform_inventory.sql',
   'migrate_ops_client_assets.sql',
-  'migrate_ops_f3_snapshots_baselines_memory.sql'
+  'migrate_ops_f3_snapshots_baselines_memory.sql',
+  'migrate_ops_action_recommendations.sql'
 ];
 
 const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql', 'migrate_ops_run_definition_model.sql', 'migrate_ops_f2_inventory_columns.sql'];
