@@ -83,12 +83,12 @@ The loop may **groom** this backlog (split/add items) as it learns — record ch
 - **V1 in-progress** on branch `feat/ops-v1-live-verify`. Done so far: `liveVerify.js`
   runs real per-service API calls and overrides the audit's presence-based status;
   wired into `accessAudit.js`; **Kinsta verifier PROVEN against the live API
-  (`verified — reached Kinsta, 114 sites`)**; offline unit tests added (suite 523/523).
-  **Remaining for V1:** build verifiers for CTM (CTM_API_KEY/SECRET), Google Ads
-  (full OAuth set → `listAccessibleCustomers`), GA4 (GA4_SERVICE_ACCOUNT_KEY →
-  list properties), GSC (service account → `sites.list`), Meta
-  (FACEBOOK_SYSTEM_USER_TOKEN → `/me`), Mailgun. Prove each against real creds
-  fetched from Secret Manager (gcloud). Then: fresh-context review → PR → green CI
-  build → merge → deploy → run the audit in prod and confirm verified counts render
-  on the Access Audit page → mark V1 done with evidence.
+  (`verified — reached Kinsta, 114 sites`)**; offline unit tests added.
+  **Proven live so far (real API calls, creds from Secret Manager):** Kinsta 114 sites ·
+  CTM 77 accounts · Meta 31 ad accounts · Mailgun 64 domains. Suite 524/524.
+  **Remaining for V1:** Google Ads (`checks/google_ads/_client.js` GoogleAdsApi →
+  `listAccessibleCustomers`), GSC (reuse `connections/gsc/auth.js` → `sites.list`),
+  GA4 (GA4_SERVICE_ACCOUNT_KEY → accountSummaries; may need `@google-analytics/admin`).
+  Then: fresh-context review → PR → green CI build → merge → deploy → run the audit in
+  prod and confirm verified counts render on the Access Audit page → mark V1 done.
   - To fetch a cred locally for a live test: `gcloud secrets versions access latest --secret=<NAME> --project=anchor-hub-480305`. Agency secret names: KINSTA_API_KEY, KINSTA_AGENCY_ID, CTM_API_KEY, CTM_API_SECRET, GOOGLE_ADS_DEVELOPER_TOKEN/REFRESH_TOKEN/CLIENT_ID/CLIENT_SECRET/MANAGER_ID, GA4_SERVICE_ACCOUNT_KEY, FACEBOOK_SYSTEM_USER_TOKEN, MAILGUN_API_KEY/DOMAIN.
