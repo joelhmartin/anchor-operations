@@ -301,6 +301,39 @@ const RULES = [
     linkedCheckResultIds({ checks }) {
       return ids(findCheck(checks, 'meta.account.domain_verification'));
     }
+  },
+
+  {
+    // V5: turn a failed snapshot.metric_anomaly check into an ops_findings row.
+    // The check already ran the deterministic baseline-deviation engine and set
+    // its own severity (warning|critical); this rule surfaces that as a finding
+    // and mirrors the severity (dynamic) so a critical z-score is not flattened
+    // to a warning.
+    name: 'snapshot_metric_anomaly',
+    category: 'correlation.snapshot_metric_anomaly',
+    severity({ checks }) {
+      const c = findCheck(checks, 'snapshot.metric_anomaly');
+      return c?.severity === 'critical' ? 'critical' : 'warning';
+    },
+    when({ checks }) {
+      const c = findCheck(checks, 'snapshot.metric_anomaly');
+      return isWarnOrFail(c);
+    },
+    summary({ checks }) {
+      const w = payload(findCheck(checks, 'snapshot.metric_anomaly')).worst;
+      if (!w) return 'A tracked metric deviated significantly from its learned baseline.';
+      const pct = w.pct_change !== null && w.pct_change !== undefined
+        ? ` (${Math.round(w.pct_change * 100)}%)` : '';
+      const z = w.z_score !== null && w.z_score !== undefined ? ` z=${w.z_score}` : '';
+      return `${w.service} ${w.metric} ${w.direction} vs ${w.period} baseline${pct}${z}: `
+           + `observed ${w.observed} vs baseline ${w.baseline_value}. Investigate before it compounds.`;
+    },
+    evidence({ checks }) {
+      return { anomaly_payload: payload(findCheck(checks, 'snapshot.metric_anomaly')) };
+    },
+    linkedCheckResultIds({ checks }) {
+      return ids(findCheck(checks, 'snapshot.metric_anomaly'));
+    }
   }
 ];
 

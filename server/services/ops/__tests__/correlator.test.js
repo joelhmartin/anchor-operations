@@ -113,7 +113,12 @@ test('rules array exports at least 10 rules and all have unique categories', () 
   for (const r of RULES) {
     assert.ok(r.name && typeof r.name === 'string');
     assert.ok(r.category && r.category.startsWith('correlation.'));
-    assert.ok(['critical', 'warning', 'info'].includes(r.severity));
+    // severity may be a static string OR a function of the matched checks
+    // (V5 snapshot anomaly mirrors the check's own severity).
+    assert.ok(
+      typeof r.severity === 'function' || ['critical', 'warning', 'info'].includes(r.severity),
+      `rule ${r.name} severity must be a valid string or a function`
+    );
     assert.equal(typeof r.when, 'function');
     assert.equal(typeof r.summary, 'function');
     assert.equal(typeof r.evidence, 'function');

@@ -32,6 +32,7 @@ import { runAccessAudit } from '../services/ops/access/accessAudit.js';
 import { getLatestAuditRun } from '../services/ops/access/auditStore.js';
 import { notifyAccessAuditToChat } from '../services/ops/access/notifyAccessAudit.js';
 import { sendAgencyChatDigest } from '../services/ops/notifications/agencyChatDigest.js';
+import { runScheduledSnapshotCollection } from '../services/ops/baselines/snapshotScheduler.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
 import {
   listSkills,
@@ -121,6 +122,22 @@ router.post('/internal/chat-digest', async (req, res) => {
   } catch (err) {
     console.warn(`[ops] chat-digest failed: ${err?.message || err}`);
     res.status(500).json({ message: 'chat digest failed' });
+  }
+});
+
+// Cloud Scheduler → daily snapshot collection + baseline recompute (V5). Runs
+// read-only connector collectSnapshot()s, upserts ops_daily_snapshots, then
+// recomputes ops_metric_baselines. Pass ?clientUserId=... to scope to one client.
+router.post('/internal/snapshot-collect', async (req, res) => {
+  const ok = await authorizeFanoutRequest(req, res);
+  if (!ok) return;
+  try {
+    const clientUserId = req.query.clientUserId ? String(req.query.clientUserId) : null;
+    const result = await runScheduledSnapshotCollection({ clientUserId });
+    res.json(result);
+  } catch (err) {
+    console.warn(`[ops] snapshot-collect failed: ${err?.message || err}`);
+    res.status(500).json({ message: 'snapshot collection failed' });
   }
 });
 
