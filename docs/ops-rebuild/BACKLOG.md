@@ -62,7 +62,15 @@ Status: `todo` ÃÂ¢ÃÂÃÂ `in-progress` ÃÂ¢ÃÂÃÂ `
 | V2 | **Daily digest auto-posts to Chat** | Cloud Scheduler ÃÂ¢ÃÂÃÂ internal endpoint ÃÂ¢ÃÂÃÂ real digest in the Chat space every morning. ACCEPTANCE: trigger the internal endpoint, observe a real digest message land; scheduler job exists. | **done** Ã¢ÂÂ (PR #25, rev 00019) |
 | V3 | **Per-client Service Connections UI** | Open a real client ÃÂ¢ÃÂÃÂ see per-platform connection status from real data ÃÂ¢ÃÂÃÂ "Verify" button updates it live. ACCEPTANCE: open a client, see states, click verify, watch it change. | **done** â (PR #26, rev 00020) |
 | V4 | **Run pipeline actually runs new checks** | A `daily_essential` run for one client collects website/uptime + connector checks ÃÂ¢ÃÂÃÂ writes real `ops_findings`. ACCEPTANCE: trigger a run, see new findings in the Findings inbox. | **done** ✅ (PR #27, rev 00021) |
-| V5 | **Snapshots scheduled ÃÂ¢ÃÂÃÂ baselines compute** | Daily snapshot collection runs; after enough days, baselines populate; an anomaly check fires. ACCEPTANCE: snapshot rows for a client; a baseline row; one anomaly finding. | todo |
+| V5 | **Snapshots scheduled ÃÂ¢ÃÂÃÂ baselines compute** | Daily snapshot collection runs; after enough days, baselines populate; an anomaly check fires. ACCEPTANCE: snapshot rows for a client; a baseline row; one anomaly finding. | **code shipped (PR #28, rev 00022); chain DORMANT — see PROD-REALITY.md** |
+
+> ⛔ **STOP — READ `docs/ops-rebuild/PROD-REALITY.md` FIRST.** Prod inspection
+> 2026-06-30: the engine has produced **0 runs / 0 check_results / 0 findings
+> all-time**. The runtime was never switched on (no Pub/Sub topic, no runner
+> Job, 0 subscriptions, 0 connector creds). Prior "DONE" verifications (incl.
+> V4's) were **local, not prod**. Do NOT build V6–V9 on an engine that has
+> never executed in production. Next work = switch-on (runtime + a website-only
+> subscription wave with client emails OFF), not more features.
 | V6 | **Recommendations ÃÂ¢ÃÂÃÂ Action Queue UI** | Findings produce recommendations shown with evidence; approve/reject writes the audit chain. ACCEPTANCE: see a recommendation in the UI, approve it, see the audit row. | todo |
 | V7 | **Google Chat commands** | `/anchorops daily`, `/anchorops clients`, `/anchorops client <name>` return real data in the Chat app. ACCEPTANCE: type a command, get a real reply. | todo |
 | V8 | **Critical findings ÃÂ¢ÃÂÃÂ Chat alerts** | A new critical finding posts a real alert to Chat (threaded). ACCEPTANCE: create/observe a critical finding, see the alert. | todo |
