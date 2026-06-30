@@ -28,3 +28,10 @@ test('checkCtm/checkMeta/checkMailgun: no creds → missing (no network)', async
   assert.equal((await checkMeta({})).status, 'missing');
   assert.equal((await checkMailgun({})).status, 'missing');
 });
+
+test('checkGoogleAds/checkGsc/checkGa4: no creds → missing (no network)', async () => {
+  const { checkGoogleAds, checkGsc, checkGa4 } = await import('../access/liveVerify.js');
+  assert.equal((await checkGoogleAds({})).status, 'missing');
+  assert.equal((await checkGsc({})).status, 'missing');
+  assert.equal((await checkGa4({})).status, 'missing');
+});
