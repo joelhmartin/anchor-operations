@@ -58,7 +58,7 @@ Status: `todo` → `in-progress` → `needs-rework` → `done`
 
 | # | Slice | Useful behavior (acceptance = observed) | Status |
 |---|---|---|---|
-| V1 | **Live access verification** | Access Audit credential cards actually call each API and show "verified, N accounts/sites" or "failed: reason" — Kinsta, CTM, Google Ads, GA4, GSC, Meta. ACCEPTANCE: run audit in prod, ≥1 service shows a real verified count. | todo |
+| V1 | **Live access verification** | Access Audit credential cards actually call each API and show "verified, N accounts/sites" or "failed: reason" — Kinsta, CTM, Google Ads, GA4, GSC, Meta. ACCEPTANCE: run audit in prod, ≥1 service shows a real verified count. | **in-progress** (branch `feat/ops-v1-live-verify`) |
 | V2 | **Daily digest auto-posts to Chat** | Cloud Scheduler → internal endpoint → real digest in the Chat space every morning. ACCEPTANCE: trigger the internal endpoint, observe a real digest message land; scheduler job exists. | todo |
 | V3 | **Per-client Service Connections UI** | Open a real client → see per-platform connection status from real data → "Verify" button updates it live. ACCEPTANCE: open a client, see states, click verify, watch it change. | todo |
 | V4 | **Run pipeline actually runs new checks** | A `daily_essential` run for one client collects website/uptime + connector checks → writes real `ops_findings`. ACCEPTANCE: trigger a run, see new findings in the Findings inbox. | todo |
@@ -76,4 +76,19 @@ The loop may **groom** this backlog (split/add items) as it learns — record ch
 
 (Each completed slice appends: `Vn done — <what a human can now do> · <evidence: output/msg-id/row/url>`.)
 
-- (none yet — V1 is next.)
+- (none done yet.)
+
+## Loop progress (resume here)
+
+- **V1 in-progress** on branch `feat/ops-v1-live-verify`. Done so far: `liveVerify.js`
+  runs real per-service API calls and overrides the audit's presence-based status;
+  wired into `accessAudit.js`; **Kinsta verifier PROVEN against the live API
+  (`verified — reached Kinsta, 114 sites`)**; offline unit tests added (suite 523/523).
+  **Remaining for V1:** build verifiers for CTM (CTM_API_KEY/SECRET), Google Ads
+  (full OAuth set → `listAccessibleCustomers`), GA4 (GA4_SERVICE_ACCOUNT_KEY →
+  list properties), GSC (service account → `sites.list`), Meta
+  (FACEBOOK_SYSTEM_USER_TOKEN → `/me`), Mailgun. Prove each against real creds
+  fetched from Secret Manager (gcloud). Then: fresh-context review → PR → green CI
+  build → merge → deploy → run the audit in prod and confirm verified counts render
+  on the Access Audit page → mark V1 done with evidence.
+  - To fetch a cred locally for a live test: `gcloud secrets versions access latest --secret=<NAME> --project=anchor-hub-480305`. Agency secret names: KINSTA_API_KEY, KINSTA_AGENCY_ID, CTM_API_KEY, CTM_API_SECRET, GOOGLE_ADS_DEVELOPER_TOKEN/REFRESH_TOKEN/CLIENT_ID/CLIENT_SECRET/MANAGER_ID, GA4_SERVICE_ACCOUNT_KEY, FACEBOOK_SYSTEM_USER_TOKEN, MAILGUN_API_KEY/DOMAIN.
