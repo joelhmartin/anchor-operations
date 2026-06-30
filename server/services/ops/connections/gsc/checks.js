@@ -61,7 +61,18 @@ export function makeConnectionHealthCheck({
       const sites = await listSites(token, { signal: ctx.signal });
       return { status: 'pass', payload: { site_count: sites.length } };
     } catch (err) {
-      return { status: 'error', severity: 'critical', payload: { error: err.message } };
+      // 401/403 → known agency-wide config gap (service account not granted access).
+      // Treat as skipped, not a critical error, to avoid flooding run-health.
+      const code = err.status ?? err.statusCode ?? err.code;
+      const isAuthError = code === 401 || code === 403 || /\b(401|403)\b/.test(String(err.message ?? ''));
+      if (isAuthError) {
+        return {
+          status: 'skipped',
+          payload: { reason: 'GSC service account not authorized on any property (40x) — grant it access in Search Console to enable organic-search checks' }
+        };
+      }
+      // Any other error (network, 5xx, timeout) — downgrade from critical to warning.
+      return { status: 'error', severity: 'warning', payload: { error: err.message } };
     }
   };
 }
