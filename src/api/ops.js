@@ -86,6 +86,12 @@ export const listClientOpsCredentials = (clientUserId) =>
 export const getClientOverview = (clientUserId) =>
   client.get(`/ops/clients/${clientUserId}/overview`).then((r) => r.data);
 
+export const listClientConnections = (clientUserId) =>
+  client.get(`/ops/clients/${clientUserId}/connections`).then((res) => res.data || []);
+
+export const verifyClientConnection = (clientUserId, provider) =>
+  client.post(`/ops/clients/${clientUserId}/connections/${provider}/verify`).then((res) => res.data);
+
 export const validateOpsCredential = (clientUserId, credentialId, body = {}) =>
   client.post(`/ops/clients/${clientUserId}/credentials/${credentialId}/validate`, body).then((res) => res.data);
 

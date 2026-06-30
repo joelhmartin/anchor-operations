@@ -55,6 +55,7 @@ import multer from 'multer';
 import { storeFile } from '../services/fileStorage.js';
 import { createPost as blogCreate, updatePost as blogUpdate, cancelPost as blogCancel, deletePost as blogDelete, listPosts as blogList, listClientWpSites, listClientKinstaBlogTargets, isClientKinstaEnvironment } from '../services/ops/blog/blogStore.js';
 import { loadClientOverview } from '../services/ops/clientOverview.js';
+import { getClientConnections, verifyClientConnection, PROVIDERS } from '../services/ops/connections/clientConnections.js';
 import { loadHomeDigest } from '../services/ops/homeDigest.js';
 import { buildRecommendations } from '../services/ops/recommendations/buildRecommendations.js';
 import { listRecommendations, getRecommendation } from '../services/ops/recommendations/recommendationStore.js';
@@ -1223,6 +1224,42 @@ router.delete('/clients/:id/credentials/:credentialId', async (req, res) => {
   } catch (err) {
     console.error('[ops] DELETE credential failed:', err);
     res.status(500).json({ message: 'Failed to delete credential' });
+  }
+});
+
+// ---------------- Service Connections (V3) ----------------
+
+// GET /clients/:id/connections — real per-platform connection status.
+router.get('/clients/:id/connections', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+  try {
+    const connections = await getClientConnections(req.params.id);
+    res.json(connections);
+  } catch (err) {
+    console.error('[ops] GET /clients/:id/connections failed:', err);
+    res.status(500).json({ message: 'Failed to load connections' });
+  }
+});
+
+// POST /clients/:id/connections/:provider/verify — run a live, read-only check.
+router.post('/clients/:id/connections/:provider/verify', async (req, res) => {
+  if (!isUuid(req.params.id)) return badUuid(res, 'client id');
+  if (!(await isOperationsClient(req.params.id))) {
+    return res.status(404).json({ message: 'Client account not found' });
+  }
+  const provider = String(req.params.provider || '').trim();
+  if (!PROVIDERS.includes(provider)) {
+    return res.status(400).json({ message: `Unknown provider "${provider}"` });
+  }
+  try {
+    const result = await verifyClientConnection({ clientUserId: req.params.id, provider });
+    res.json(result);
+  } catch (err) {
+    console.error('[ops] POST /clients/:id/connections/:provider/verify failed:', err);
+    res.status(500).json({ message: 'Failed to verify connection' });
   }
 });
 
