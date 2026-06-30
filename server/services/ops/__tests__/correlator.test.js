@@ -155,3 +155,106 @@ test('payload sanitizer redacts DOB only on date-of-birth keys', () => {
   assert.ok(!out.dob.includes('1990'));
   assert.equal(out.created_at, '2026-05-05');
 });
+
+// ── single-signal website finding rules ──────────────────────────────────────
+
+test('site_unreachable fires when uptime check fails', () => {
+  const checks = [
+    makeCheck({ id: 'u1', check_id: 'web.uptime.reachable', status: 'fail', severity: 'critical', payload_json: { http_status: 503, reachable: false } })
+  ];
+  const findings = evaluateRules({ checks });
+  const match = findings.find((f) => f.name === 'site_unreachable');
+  assert.ok(match, 'should produce a site_unreachable finding');
+  assert.equal(match.category, 'correlation.site_unreachable');
+  assert.equal(match.severity, 'critical');
+  assert.deepEqual(match.linkedCheckResultIds, ['u1']);
+  assert.ok(match.summary.includes('503'), 'summary should include the HTTP status code');
+  assert.ok(match.summary.includes('unreachable'), 'summary should mention unreachable');
+});
+
+test('site_unreachable does not fire when uptime check passes', () => {
+  const checks = [
+    makeCheck({ id: 'u1', check_id: 'web.uptime.reachable', status: 'pass' })
+  ];
+  const findings = evaluateRules({ checks });
+  assert.equal(findings.find((f) => f.name === 'site_unreachable'), undefined);
+});
+
+test('ssl_expiring_critical fires when 7d check fails', () => {
+  const checks = [
+    makeCheck({ id: 's7', check_id: 'web.ssl.expiry_within_7d', status: 'fail', severity: 'critical', payload_json: { days_to_expiry: 3, threshold_days: 7 } })
+  ];
+  const findings = evaluateRules({ checks });
+  const match = findings.find((f) => f.name === 'ssl_expiring_critical');
+  assert.ok(match, 'should produce ssl_expiring_critical finding');
+  assert.equal(match.category, 'correlation.ssl_expiring_critical');
+  assert.equal(match.severity, 'critical');
+  assert.deepEqual(match.linkedCheckResultIds, ['s7']);
+  assert.ok(match.summary.includes('3'), 'summary should include the days count');
+});
+
+test('ssl_expiring_critical does not fire when 7d check passes', () => {
+  const checks = [
+    makeCheck({ id: 's7', check_id: 'web.ssl.expiry_within_7d', status: 'pass' })
+  ];
+  const findings = evaluateRules({ checks });
+  assert.equal(findings.find((f) => f.name === 'ssl_expiring_critical'), undefined);
+});
+
+test('ssl_expiring_soon fires when 30d fails but 7d passes', () => {
+  const checks = [
+    makeCheck({ id: 's30', check_id: 'web.ssl.expiry_within_30d', status: 'fail', severity: 'warning', payload_json: { days_to_expiry: 20, threshold_days: 30 } }),
+    makeCheck({ id: 's7', check_id: 'web.ssl.expiry_within_7d', status: 'pass' })
+  ];
+  const findings = evaluateRules({ checks });
+  const match = findings.find((f) => f.name === 'ssl_expiring_soon');
+  assert.ok(match, 'should produce ssl_expiring_soon finding');
+  assert.equal(match.category, 'correlation.ssl_expiring_soon');
+  assert.equal(match.severity, 'warning');
+  assert.deepEqual(match.linkedCheckResultIds, ['s30']);
+  assert.ok(match.summary.includes('20'), 'summary should include the days count');
+});
+
+test('ssl_expiring_soon does not fire when 30d passes', () => {
+  const checks = [
+    makeCheck({ id: 's30', check_id: 'web.ssl.expiry_within_30d', status: 'pass' }),
+    makeCheck({ id: 's7', check_id: 'web.ssl.expiry_within_7d', status: 'pass' })
+  ];
+  const findings = evaluateRules({ checks });
+  assert.equal(findings.find((f) => f.name === 'ssl_expiring_soon'), undefined);
+});
+
+test('ssl_expiring_soon does NOT fire when 7d check also fails (no double-report); ssl_expiring_critical does fire', () => {
+  const checks = [
+    makeCheck({ id: 's30', check_id: 'web.ssl.expiry_within_30d', status: 'fail', severity: 'critical', payload_json: { days_to_expiry: 3, threshold_days: 30 } }),
+    makeCheck({ id: 's7', check_id: 'web.ssl.expiry_within_7d', status: 'fail', severity: 'critical', payload_json: { days_to_expiry: 3, threshold_days: 7 } })
+  ];
+  const findings = evaluateRules({ checks });
+  assert.equal(findings.find((f) => f.name === 'ssl_expiring_soon'), undefined, 'ssl_expiring_soon must not fire when 7d also fails');
+  const critMatch = findings.find((f) => f.name === 'ssl_expiring_critical');
+  assert.ok(critMatch, 'ssl_expiring_critical must fire when 7d fails');
+  assert.equal(critMatch.severity, 'critical');
+});
+
+test('tracking_install_missing fires when tracking check fails', () => {
+  const checks = [
+    makeCheck({ id: 't1', check_id: 'web.tracking_install', status: 'fail', payload_json: { gtm_present: false, ga4_present: false, meta_pixel_present: true, issues: ['GTM missing', 'GA4 missing'] } })
+  ];
+  const findings = evaluateRules({ checks });
+  const match = findings.find((f) => f.name === 'tracking_install_missing');
+  assert.ok(match, 'should produce tracking_install_missing finding');
+  assert.equal(match.category, 'correlation.tracking_install_missing');
+  assert.equal(match.severity, 'warning');
+  assert.deepEqual(match.linkedCheckResultIds, ['t1']);
+  assert.ok(match.summary.includes('GTM'), 'summary should list GTM as missing');
+  assert.ok(match.summary.includes('GA4'), 'summary should list GA4 as missing');
+  assert.ok(!match.summary.includes('Meta Pixel'), 'summary should not list Meta Pixel (it is present)');
+});
+
+test('tracking_install_missing does not fire when tracking check passes', () => {
+  const checks = [
+    makeCheck({ id: 't1', check_id: 'web.tracking_install', status: 'pass', payload_json: { gtm_present: true, ga4_present: true, meta_pixel_present: true } })
+  ];
+  const findings = evaluateRules({ checks });
+  assert.equal(findings.find((f) => f.name === 'tracking_install_missing'), undefined);
+});

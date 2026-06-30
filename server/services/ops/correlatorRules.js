@@ -304,6 +304,99 @@ const RULES = [
   },
 
   {
+    name: 'site_unreachable',
+    category: 'correlation.site_unreachable',
+    severity: 'critical',
+    when({ checks }) {
+      const up = findCheck(checks, 'web.uptime.reachable');
+      return up && up.status === 'fail';
+    },
+    summary({ checks }) {
+      const up = findCheck(checks, 'web.uptime.reachable');
+      const p = payload(up);
+      const httpPart = p.http_status != null ? ` (HTTP ${p.http_status})` : '';
+      return `Site is unreachable${httpPart}. Visitors and paid traffic cannot load it.`;
+    },
+    evidence({ checks }) {
+      return { uptime_payload: payload(findCheck(checks, 'web.uptime.reachable')) };
+    },
+    linkedCheckResultIds({ checks }) {
+      return ids(findCheck(checks, 'web.uptime.reachable'));
+    }
+  },
+
+  {
+    name: 'ssl_expiring_critical',
+    category: 'correlation.ssl_expiring_critical',
+    severity: 'critical',
+    when({ checks }) {
+      const ssl7 = findCheck(checks, 'web.ssl.expiry_within_7d');
+      return ssl7 && ssl7.status === 'fail';
+    },
+    summary({ checks }) {
+      const ssl7 = findCheck(checks, 'web.ssl.expiry_within_7d');
+      const p = payload(ssl7);
+      const days = Number.isFinite(p.days_to_expiry) ? `${p.days_to_expiry} day(s)` : 'less than 7 days';
+      return `SSL certificate expires in ${days}. Renew immediately to prevent browser security warnings and site outages.`;
+    },
+    evidence({ checks }) {
+      return { ssl_7d_payload: payload(findCheck(checks, 'web.ssl.expiry_within_7d')) };
+    },
+    linkedCheckResultIds({ checks }) {
+      return ids(findCheck(checks, 'web.ssl.expiry_within_7d'));
+    }
+  },
+
+  {
+    name: 'ssl_expiring_soon',
+    category: 'correlation.ssl_expiring_soon',
+    severity: 'warning',
+    when({ checks }) {
+      const ssl30 = findCheck(checks, 'web.ssl.expiry_within_30d');
+      const ssl7 = findCheck(checks, 'web.ssl.expiry_within_7d');
+      return (ssl30 && ssl30.status === 'fail') && !(ssl7 && ssl7.status === 'fail');
+    },
+    summary({ checks }) {
+      const ssl30 = findCheck(checks, 'web.ssl.expiry_within_30d');
+      const p = payload(ssl30);
+      const days = Number.isFinite(p.days_to_expiry) ? `${p.days_to_expiry} day(s)` : 'less than 30 days';
+      return `SSL certificate expires in ${days}. Renew soon to avoid service interruption.`;
+    },
+    evidence({ checks }) {
+      return { ssl_30d_payload: payload(findCheck(checks, 'web.ssl.expiry_within_30d')) };
+    },
+    linkedCheckResultIds({ checks }) {
+      return ids(findCheck(checks, 'web.ssl.expiry_within_30d'));
+    }
+  },
+
+  {
+    name: 'tracking_install_missing',
+    category: 'correlation.tracking_install_missing',
+    severity: 'warning',
+    when({ checks }) {
+      const inst = findCheck(checks, 'web.tracking_install');
+      return inst && inst.status === 'fail';
+    },
+    summary({ checks }) {
+      const inst = findCheck(checks, 'web.tracking_install');
+      const p = payload(inst);
+      const missing = [];
+      if (p.gtm_present === false) missing.push('GTM');
+      if (p.ga4_present === false) missing.push('GA4');
+      if (p.meta_pixel_present === false) missing.push('Meta Pixel');
+      const list = missing.length > 0 ? missing.join(', ') : 'tracking tags';
+      return `Missing tracking tags: ${list}. Conversion and analytics measurement may be broken.`;
+    },
+    evidence({ checks }) {
+      return { tracking_install_payload: payload(findCheck(checks, 'web.tracking_install')) };
+    },
+    linkedCheckResultIds({ checks }) {
+      return ids(findCheck(checks, 'web.tracking_install'));
+    }
+  },
+
+  {
     // V5: turn a failed snapshot.metric_anomaly check into an ops_findings row.
     // The check already ran the deterministic baseline-deviation engine and set
     // its own severity (warning|critical); this rule surfaces that as a finding
