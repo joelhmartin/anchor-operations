@@ -31,6 +31,7 @@ import { listAllChecks } from '../services/ops/checks/registry.js';
 import { runAccessAudit } from '../services/ops/access/accessAudit.js';
 import { getLatestAuditRun } from '../services/ops/access/auditStore.js';
 import { notifyAccessAuditToChat } from '../services/ops/access/notifyAccessAudit.js';
+import { sendAgencyChatDigest } from '../services/ops/notifications/agencyChatDigest.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
 import {
   listSkills,
@@ -103,6 +104,20 @@ router.post('/internal/attention-recompute', async (req, res) => {
   } catch (err) {
     console.warn(`[ops] attention-recompute failed: ${err?.message || err}`);
     res.status(500).json({ message: 'attention recompute failed' });
+  }
+});
+
+// Cloud Scheduler → daily agency digest posted to the default Google Chat space.
+router.post('/internal/chat-digest', async (req, res) => {
+  const ok = await authorizeFanoutRequest(req, res);
+  if (!ok) return;
+  try {
+    const commandCenter = await loadCommandCenter();
+    const result = await sendAgencyChatDigest({ commandCenter });
+    res.json(result);
+  } catch (err) {
+    console.warn(`[ops] chat-digest failed: ${err?.message || err}`);
+    res.status(500).json({ message: 'chat digest failed' });
   }
 });
 
