@@ -10,7 +10,8 @@ import { storeFile } from '../services/fileStorage.js';
 import {
   listAccessiblePages,
   linkClient,
-  healthCheckPage
+  healthCheckPage,
+  assignSystemUserToPage
 } from '../services/metaPagePosting.js';
 import { publishPost } from '../services/socialPublisher.js';
 import { verifyMediaToken } from '../services/socialMediaTokens.js';
@@ -52,6 +53,23 @@ router.get('/pages', async (req, res, next) => {
   try {
     const pages = await listAccessiblePages();
     res.json(pages);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /system-pages — the system user's accessible FB Pages (NO tokens in payload).
+// Used by ComposeDialog to let staff link a client's Page from the agency BM.
+router.get('/system-pages', async (req, res, next) => {
+  try {
+    const pages = await listAccessiblePages();
+    res.json(
+      (pages || []).map((p) => ({
+        id: p.fbPageId,
+        name: p.fbPageName,
+        instagram: p.igUsername || null
+      }))
+    );
   } catch (e) {
     next(e);
   }
@@ -192,6 +210,30 @@ router.post('/client-pages/:clientId/:fbPageId/publishing', async (req, res, nex
       actorId: req.user.id
     });
     const pages = await listClientPages(req.params.clientId);
+    res.json(pages);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /client-pages/:clientId/:fbPageId/grant-access — assign the agency system
+// user to a Page the BM can't yet reach, then link the client.
+// Prerequisites: the Page must already be in the agency Business Manager and the
+// system-user token must carry business_management + pages_manage_metadata scopes.
+router.post('/client-pages/:clientId/:fbPageId/grant-access', async (req, res, next) => {
+  try {
+    const { clientId, fbPageId } = req.params;
+    await assignSystemUserToPage({ pageId: fbPageId });
+    const link = await linkClient({ clientId, fbPageId, createdBy: req.user.id });
+    await logSecurityEvent({
+      eventType: 'social.grant_access',
+      eventCategory: 'access',
+      userId: req.user.id,
+      success: true,
+      details: { link_id: link.id, client_id: clientId, fb_page_id: fbPageId }
+    }).catch(() => {});
+    const { listClientPages } = await import('../services/socialClientLinkSync.js');
+    const pages = await listClientPages(clientId);
     res.json(pages);
   } catch (e) {
     next(e);

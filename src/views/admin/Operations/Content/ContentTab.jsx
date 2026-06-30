@@ -74,6 +74,7 @@ export default function ContentTab({ activeClientId, mode: forcedMode }) {
             open={composeOpen}
             onClose={() => setComposeOpen(false)}
             clients={clients}
+            activeClientId={activeClientId}
             presetDate={presetDate}
             onCreated={handleCreated}
           />
