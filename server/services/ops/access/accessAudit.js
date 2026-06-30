@@ -10,6 +10,7 @@ import { checkOpsTables as checkOpsTablesDefault, probeReadWrite as probeReadWri
 import { checkPubSubTopics, listTopicShortNames } from './pubsubAccess.js';
 import { classifyService, rollupStatus, summarize } from './statusClassifier.js';
 import { createAuditRun as createAuditRunDefault, finishAuditRun as finishAuditRunDefault } from './auditStore.js';
+import { computeClientCoverage as computeClientCoverageDefault } from './clientCoverage.js';
 
 async function safe(fn, onError) {
   try {
@@ -29,7 +30,8 @@ export async function runAccessAudit(deps = {}) {
     probeReadWrite = probeReadWriteDefault,
     pubsubClient = undefined, // undefined → build a real client; null → skip
     createAuditRun = createAuditRunDefault,
-    finishAuditRun = finishAuditRunDefault
+    finishAuditRun = finishAuditRunDefault,
+    computeClientCoverage = computeClientCoverageDefault
   } = deps;
 
   const run = await createAuditRun();
@@ -67,12 +69,18 @@ export async function runAccessAudit(deps = {}) {
     warnings.push('pubsub: topic listing skipped');
   }
 
+  // --- client access coverage (real per-client connection state) ---
+  const clientCoverage = await safe(
+    () => computeClientCoverage(),
+    (err) => ({ total: 0, services: {}, error: err?.message })
+  );
+
   // --- rollup ---
   const statuses = Object.values(services).map((s) => s.status);
   const overall = rollupStatus(statuses);
   const summary = summarize(statuses);
 
-  const details = { runtime, services };
+  const details = { runtime, services, clientCoverage };
   const missing = [...cred.missing];
 
   const finished = await finishAuditRun(run.id, {
