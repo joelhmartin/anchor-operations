@@ -18,8 +18,12 @@ export function compareMetric(observed, baseline = {}) {
   const sd = stddev === null || stddev === undefined ? null : Number(stddev);
   const delta = round6(observed - base);
 
-  const pct_change = base === 0 ? null : round6((observed - base) / base);
-  const z_score = sd && sd !== 0 ? round6((observed - base) / sd) : null;
+  // Guard near-zero denominators: a baseline of e.g. 0.0001 would make pct_change
+  // (and a tiny-stddev z) explode into a false critical. Treat sub-epsilon
+  // baselines/stddevs as "no ratio" rather than amplifying noise.
+  const EPS = 1e-9;
+  const pct_change = Math.abs(base) < EPS ? null : round6((observed - base) / base);
+  const z_score = sd && Math.abs(sd) > EPS ? round6((observed - base) / sd) : null;
   const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
 
   return {
