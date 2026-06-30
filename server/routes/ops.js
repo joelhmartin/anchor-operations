@@ -114,7 +114,9 @@ router.post('/internal/chat-digest', async (req, res) => {
   try {
     const commandCenter = await loadCommandCenter();
     const result = await sendAgencyChatDigest({ commandCenter });
-    res.json(result);
+    // Surface a delivery failure as non-2xx so Cloud Scheduler retries/alerts
+    // (the failed post is also recorded in ops_notification_events).
+    res.status(result.ok ? 200 : 502).json(result);
   } catch (err) {
     console.warn(`[ops] chat-digest failed: ${err?.message || err}`);
     res.status(500).json({ message: 'chat digest failed' });

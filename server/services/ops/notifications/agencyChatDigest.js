@@ -50,8 +50,9 @@ export function renderAgencyDigestText(commandCenter, clientNames = {}) {
 /** Resolve display names for a set of client user ids. */
 export async function resolveClientNames(ids, queryFn = query) {
   if (!ids.length) return {};
+  // Non-PII fallback — never egress a client's login email into the team space.
   const { rows } = await queryFn(
-    `SELECT u.id AS user_id, COALESCE(NULLIF(u.name, ''), u.email, u.id::text) AS name
+    `SELECT u.id AS user_id, COALESCE(NULLIF(u.name, ''), 'Client ' || left(u.id::text, 8)) AS name
        FROM users u WHERE u.id = ANY($1::uuid[])`,
     [ids]
   );
@@ -74,7 +75,10 @@ export async function sendAgencyChatDigest({
   const ids = shapeHomeDigest({ commandCenter }).needsAttention.map((c) => c.clientUserId);
   const names = await resolveNames(ids).catch(() => ({}));
 
-  await send({
+  // sendWebhookMessage does NOT throw on a down/4xx/5xx Chat endpoint — it
+  // returns { sent:false, reason }. Reflect that so the route (and Cloud
+  // Scheduler) can see a real failure instead of a false success.
+  const result = await send({
     webhookUrl,
     text: renderAgencyDigestText(commandCenter, names),
     clientUserId: null,
@@ -82,5 +86,6 @@ export async function sendAgencyChatDigest({
     referenceId: null,
     referenceType: 'agency_digest'
   });
-  return { ok: true, reason: 'sent' };
+  const sent = result?.sent !== false;
+  return { ok: sent, reason: sent ? 'sent' : result?.reason || 'send_failed' };
 }
