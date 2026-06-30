@@ -148,3 +148,4 @@ A phase flips `pending-plan → ready` only once its plan doc is committed to `m
 - 2026-06-29 — run (A-BUILD): no ready phase — all 10 phases (F0–F9) complete. Open PR #7 is polish/ops-budget-precheck-includes-run-cost (not a feat/ops-* branch; no guard trigger). No build performed.
 - 2026-06-29 — run (B-REVIEW): nothing to review — all phases F0–F9 are complete, no phase in `in_review`. No action taken. NOTE: direct git push to main blocked (branch protection); STATE update pushed via GitHub API instead.
 - 2026-06-30 — run (A-BUILD): no ready phase — all 10 phases (F0–F9) complete. Open PR #7 is polish/ops-budget-precheck-includes-run-cost (not a feat/ops-* branch; no guard trigger). No build performed.
+- 2026-06-30 — run (B-REVIEW): nothing to review — all phases F0–F9 are complete, no phase in `in_review`. Open PR #7 is polish/ops-budget-precheck-includes-run-cost (not a feat/ops-fN-* phase branch; not in scope for REVIEW agent). No action taken.
