@@ -15,7 +15,8 @@ import {
   LinearProgress, CircularProgress, Alert, Tooltip
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { getAccessAudit, runAccessAudit } from '../../../../api/ops';
+import ChatIcon from '@mui/icons-material/ChatBubbleOutline';
+import { getAccessAudit, runAccessAudit, notifyAccessAudit } from '../../../../api/ops';
 
 const COLOR = { green: 'success', yellow: 'warning', red: 'error', gray: 'default' };
 
@@ -91,6 +92,8 @@ export default function AccessAuditTab() {
   const [audit, setAudit] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -112,12 +115,30 @@ export default function AccessAuditTab() {
   const run = async () => {
     setRunning(true);
     setError(null);
+    setNotice(null);
     try {
       setAudit(readAudit(await runAccessAudit()));
     } catch (e) {
       setError(e?.response?.data?.detail || e?.message || 'Audit run failed');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const notify = async () => {
+    setNotifying(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const r = await notifyAccessAudit();
+      if (r?.ok) setNotice('Posted the audit summary to Google Chat.');
+      else if (r?.reason === 'no_webhook_configured') setError('No Google Chat webhook is configured on the server.');
+      else if (r?.reason === 'no_audit_yet') setError('Run the audit first, then post it.');
+      else setError(`Could not post to Chat (${r?.reason || 'unknown'}).`);
+    } catch (e) {
+      setError(e?.response?.data?.detail || e?.message || 'Posting to Chat failed');
+    } finally {
+      setNotifying(false);
     }
   };
 
@@ -137,11 +158,17 @@ export default function AccessAuditTab() {
               : 'No audit has been run yet.'}
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={running ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />} onClick={run} disabled={running}>
-          {running ? 'Running…' : 'Run audit now'}
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={notifying ? <CircularProgress size={16} color="inherit" /> : <ChatIcon />} onClick={notify} disabled={notifying || !audit}>
+            {notifying ? 'Posting…' : 'Send to Google Chat'}
+          </Button>
+          <Button variant="contained" startIcon={running ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />} onClick={run} disabled={running}>
+            {running ? 'Running…' : 'Run audit now'}
+          </Button>
+        </Stack>
       </Stack>
 
+      {notice ? <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert> : null}
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
       {audit ? (

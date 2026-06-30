@@ -38,6 +38,8 @@ ADMIN_DB_SECRET="DATABASE_URL" # the full-privilege admin connection (NOT anchor
 SECRETS="SOCIAL_MEDIA_SECRET=SOCIAL_MEDIA_SECRET:latest"
 SECRETS+=",FACEBOOK_SYSTEM_USER_TOKEN=FACEBOOK_SYSTEM_USER_TOKEN:latest"
 SECRETS+=",ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest"
+# Google Chat default incoming webhook (Operations agent posts digests/alerts).
+SECRETS+=",GOOGLE_CHAT_WEBHOOK_DEFAULT=google-chat-webhook-default:latest"
 
 DRY_RUN="false"
 SKIP_MIGRATE="false"
