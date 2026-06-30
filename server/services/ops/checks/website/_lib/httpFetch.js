@@ -131,8 +131,14 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
 
 /**
  * Resolve the primary website URL for a client. Looks first at the linked
- * Kinsta site primary domain, falls back to `client_profiles.website_url`.
- * Returns `null` when nothing is configured.
+ * Kinsta site's live-environment primary domain, falls back to
+ * `brand_assets.website_url`. Returns `null` when nothing is configured.
+ *
+ * NOTE: `primary_domain` lives on `kinsta_environments` (per live environment),
+ * NOT on `kinsta_sites`. We resolve it via the live environment for the linked
+ * site. (A prior version selected `kinsta_sites.primary_domain`, a column that
+ * does not exist, which threw at runtime and forced every website check to
+ * record `error` instead of running.)
  *
  * Caller responsibility: pass the result through `assertPublicHttpUrl` before
  * any fetch (safeHttpFetch already does this).
@@ -140,15 +146,23 @@ export async function safeHttpFetch(rawUrl, opts = {}) {
 export async function resolveClientWebsiteUrl(query, clientUserId) {
   const sql = `
     SELECT COALESCE(
-             NULLIF(ks.primary_domain, ''),
+             NULLIF(ke.primary_domain, ''),
              NULLIF(ba.website_url, '')
            ) AS website_url
       FROM users u
       LEFT JOIN brand_assets ba ON ba.user_id = u.id
       LEFT JOIN kinsta_site_clients ksc ON ksc.client_user_id = u.id
-      LEFT JOIN kinsta_sites ks ON ks.id = ksc.site_id
+      LEFT JOIN LATERAL (
+        SELECT e.primary_domain
+          FROM kinsta_environments e
+         WHERE e.site_id = ksc.site_id
+           AND e.is_live = TRUE
+           AND e.primary_domain IS NOT NULL
+         ORDER BY e.created_at ASC
+         LIMIT 1
+      ) ke ON TRUE
      WHERE u.id = $1
-     ORDER BY ks.primary_domain DESC NULLS LAST
+     ORDER BY ke.primary_domain DESC NULLS LAST
      LIMIT 1
   `;
   const { rows } = await query(sql, [clientUserId]);
