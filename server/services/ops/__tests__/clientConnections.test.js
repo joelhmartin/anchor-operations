@@ -63,14 +63,16 @@ test('getClientConnections derives status from columns + join tables', async () 
     conns: []
   });
 
-  const out = await getClientConnections(CLIENT, queryFn);
+  const out = await getClientConnections(CLIENT, queryFn, async () => null);
   const by = Object.fromEntries(out.map((c) => [c.provider, c]));
 
-  assert.equal(by.google_ads.status, 'connected');
+  // Derived (pre-verify) configured state is 'partial' (yellow) — green is
+  // reserved for an actual persisted verify (see overlay test below).
+  assert.equal(by.google_ads.status, 'partial');
   assert.equal(by.google_ads.accountRef, '123-456-7890');
-  assert.equal(by.meta.status, 'connected'); // page link present
+  assert.equal(by.meta.status, 'partial'); // page link present, not yet verified
   assert.equal(by.meta.accountRef, '1129176073610199');
-  assert.equal(by.ctm.status, 'connected');
+  assert.equal(by.ctm.status, 'partial');
   assert.equal(by.website.status, 'partial'); // status text but provided=false
   assert.equal(by.ga4.status, 'not_provided');
   assert.equal(by.kinsta.status, 'not_provided');

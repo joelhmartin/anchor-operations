@@ -19,7 +19,7 @@
 import { query as defaultQuery } from '../../../db.js';
 import { getPageToken as defaultGetPageToken } from '../../metaPagePosting.js';
 import { listAllSites as defaultListAllSites } from '../operations-website/kinstaApi.js';
-import { getCustomerClient as defaultGetCustomerClient } from '../checks/google_ads/_client.js';
+import { getCustomerClient as defaultGetCustomerClient, resolveCustomerIdForClient as defaultResolveAdsId } from '../checks/google_ads/_client.js';
 
 // provider → service_category (matches connectionStore / umbrellaMap conventions)
 export const PROVIDER_CATEGORY = {
@@ -59,14 +59,13 @@ const looksProvided = (statusText) =>
  * configuration (no network). Returns the UI-facing shape; verify overlays
  * happen in getClientConnections.
  */
-function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }) {
+function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount, adsCustomerId }) {
   const p = profile || {};
 
   function fromAccess(provided, statusText, { connectedDetail, partialDetail, missingDetail }) {
     if (provided === true || looksProvided(statusText)) {
-      return provided === true
-        ? { status: 'connected', detail: connectedDetail }
-        : { status: 'partial', detail: partialDetail };
+      // Configured ≠ live-verified. Green ('verified') is reserved for an actual Verify.
+      return { status: 'partial', detail: `${provided === true ? connectedDetail : partialDetail} — Verify to confirm` };
     }
     if (isSet(statusText)) return { status: 'partial', detail: `${partialDetail} (status: ${statusText})` };
     return { status: 'not_provided', detail: missingDetail };
@@ -74,15 +73,14 @@ function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }
 
   const out = {};
 
-  // google_ads — a linked account id is the strongest signal.
-  if (isSet(p.google_ads_account_id)) {
+  // google_ads — resolved the same way the rest of Ops resolves it
+  // (tracking_configs via resolveCustomerIdForClient, with the client_profiles
+  // column as fallback), so this panel agrees with the actual checks.
+  if (isSet(adsCustomerId)) {
     out.google_ads = {
-      status: p.google_ads_access_provided === true ? 'connected' : 'partial',
-      detail:
-        p.google_ads_access_provided === true
-          ? `Account ${p.google_ads_account_id} linked, access provided`
-          : `Account ${p.google_ads_account_id} linked, access not yet confirmed`,
-      accountRef: String(p.google_ads_account_id)
+      status: 'partial',
+      detail: `Account ${adsCustomerId} linked — Verify to confirm`,
+      accountRef: String(adsCustomerId)
     };
   } else {
     out.google_ads = {
@@ -107,8 +105,8 @@ function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }
   // meta — a meta_page_links row is the real signal; access columns are the fallback.
   if (hasMetaLink) {
     out.meta = {
-      status: 'connected',
-      detail: `Facebook Page ${metaPageId} linked`,
+      status: 'partial',
+      detail: `Facebook Page ${metaPageId} linked — Verify to confirm`,
       accountRef: metaPageId ? String(metaPageId) : null
     };
   } else {
@@ -134,7 +132,7 @@ function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }
   // ctm — per-client api key / account number on client_profiles.
   if (isSet(p.ctm_account_number) || isSet(p.ctm_api_key)) {
     out.ctm = {
-      status: 'connected',
+      status: 'partial',
       detail: isSet(p.ctm_account_number)
         ? `CTM account ${p.ctm_account_number} configured`
         : 'CTM API key configured',
@@ -151,8 +149,8 @@ function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }
   // kinsta — linked via kinsta_site_clients.
   if (kinstaSiteCount > 0) {
     out.kinsta = {
-      status: 'connected',
-      detail: `${kinstaSiteCount} Kinsta site${kinstaSiteCount === 1 ? '' : 's'} linked`,
+      status: 'partial',
+      detail: `${kinstaSiteCount} Kinsta site${kinstaSiteCount === 1 ? '' : 's'} linked — Verify to confirm`,
       accountRef: `${kinstaSiteCount} site${kinstaSiteCount === 1 ? '' : 's'}`
     };
   } else {
@@ -166,7 +164,7 @@ function deriveFromColumns({ profile, hasMetaLink, metaPageId, kinstaSiteCount }
  * getClientConnections — one row per platform with the REAL derived status,
  * overlaid with the latest persisted verify result when one exists.
  */
-export async function getClientConnections(clientUserId, queryFn = defaultQuery) {
+export async function getClientConnections(clientUserId, queryFn = defaultQuery, resolveAdsId = defaultResolveAdsId) {
   if (!clientUserId) throw new Error('clientConnections: clientUserId required');
 
   const [{ rows: profileRows }, { rows: metaRows }, { rows: kinstaRows }, { rows: connRows }] = await Promise.all([
@@ -195,12 +193,16 @@ export async function getClientConnections(clientUserId, queryFn = defaultQuery)
   const profile = profileRows[0] || null;
   const metaRow = metaRows[0] || null;
   const kinstaSiteCount = kinstaRows[0]?.n || 0;
+  // Resolve the Google Ads account the same way the checks do (tracking_configs),
+  // falling back to the client_profiles column, so the panel agrees with the checks.
+  const adsCustomerId = (await resolveAdsId(clientUserId).catch(() => null)) || profile?.google_ads_account_id || null;
 
   const derived = deriveFromColumns({
     profile,
     hasMetaLink: Boolean(metaRow),
     metaPageId: metaRow?.fb_page_id || null,
-    kinstaSiteCount
+    kinstaSiteCount,
+    adsCustomerId
   });
 
   // index persisted verify results by provider
@@ -269,7 +271,12 @@ async function verifyKinsta(clientUserId, deps) {
     [clientUserId]
   );
   if (rows.length === 0) return { status: 'missing', detail: 'No Kinsta site linked to this client' };
-  const sites = await deps.listAllSites();
+  let sites;
+  try {
+    sites = await deps.listAllSites();
+  } catch (err) {
+    return { status: 'failed', detail: `Kinsta API call failed: ${(err?.message || 'unknown error').slice(0, 120)}` };
+  }
   const agencyIds = new Set((sites || []).map((s) => String(s.id)));
   const present = rows.filter((r) => agencyIds.has(String(r.kinsta_site_id)));
   if (present.length === 0) {
@@ -306,13 +313,13 @@ async function verifyMeta(clientUserId, deps) {
 }
 
 async function verifyGoogleAds(clientUserId, deps) {
-  const queryFn = deps.query;
-  const { rows } = await queryFn(
-    `SELECT google_ads_account_id FROM client_profiles WHERE user_id = $1`,
-    [clientUserId]
-  );
-  const accountId = rows[0]?.google_ads_account_id;
-  if (!isSet(accountId)) return { status: 'missing', detail: 'No Google Ads account id on file for this client' };
+  const resolveAds = deps.resolveAdsId || defaultResolveAdsId;
+  let accountId = await resolveAds(clientUserId).catch(() => null);
+  if (!isSet(accountId)) {
+    const { rows } = await deps.query(`SELECT google_ads_account_id FROM client_profiles WHERE user_id = $1`, [clientUserId]);
+    accountId = rows[0]?.google_ads_account_id;
+  }
+  if (!isSet(accountId)) return { status: 'missing', detail: 'No Google Ads account on file for this client' };
   const customer = deps.getCustomerClient(accountId);
   if (!customer) {
     return { status: 'degraded', detail: 'Google Ads agency credentials not configured — cannot run a live check' };
@@ -374,7 +381,8 @@ export async function verifyClientConnection({ clientUserId, provider }, deps = 
     query: deps.query || defaultQuery,
     getPageToken: deps.getPageToken || defaultGetPageToken,
     listAllSites: deps.listAllSites || defaultListAllSites,
-    getCustomerClient: deps.getCustomerClient || defaultGetCustomerClient
+    getCustomerClient: deps.getCustomerClient || defaultGetCustomerClient,
+    resolveAdsId: deps.resolveAdsId || defaultResolveAdsId
   };
 
   let result;
