@@ -92,3 +92,5 @@ The loop may **groom** this backlog (split/add items) as it learns — record ch
   Then: fresh-context review → PR → green CI build → merge → deploy → run the audit in
   prod and confirm verified counts render on the Access Audit page → mark V1 done.
   - To fetch a cred locally for a live test: `gcloud secrets versions access latest --secret=<NAME> --project=anchor-hub-480305`. Agency secret names: KINSTA_API_KEY, KINSTA_AGENCY_ID, CTM_API_KEY, CTM_API_SECRET, GOOGLE_ADS_DEVELOPER_TOKEN/REFRESH_TOKEN/CLIENT_ID/CLIENT_SECRET/MANAGER_ID, GA4_SERVICE_ACCOUNT_KEY, FACEBOOK_SYSTEM_USER_TOKEN, MAILGUN_API_KEY/DOMAIN.
+
+- **SOCIAL (system-user Facebook posting) — DONE** (user-verified "it's reading the pages") · PR #23 → revision anchor-ops-00017-87v. Create-post is scoped to the client's tab (no picker, no OAuth gate); links a client's Page from the 22 system-user-accessible Pages; posts via the system-user Page token (proven: 204-char token resolved, no posting). Dormant grant-access API for Pages outside the 22.
