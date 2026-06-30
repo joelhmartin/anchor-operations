@@ -16,17 +16,19 @@ import { useState } from 'react';
 import { Box, Tabs, Tab } from '@mui/material';
 import BulkTab from '../Bulk/BulkTab';
 import CostTab from '../Cost/CostTab';
+import AccessAuditTab from './AccessAuditTab';
 
 export default function PortfolioView() {
-  const [tab, setTab] = useState('bulk');
+  const [tab, setTab] = useState('access');
 
   return (
     <Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+        <Tab value="access" label="Access Audit" />
         <Tab value="bulk" label="Bulk & automation" />
         <Tab value="cost" label="Cost" />
       </Tabs>
-      {tab === 'bulk' ? <BulkTab /> : <CostTab />}
+      {tab === 'access' ? <AccessAuditTab /> : tab === 'bulk' ? <BulkTab /> : <CostTab />}
     </Box>
   );
 }
