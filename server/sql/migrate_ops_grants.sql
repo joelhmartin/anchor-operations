@@ -5,6 +5,13 @@
 -- admin role can land without granting ops_app — causing "permission denied for
 -- table ..." at runtime (e.g. ops_access_audit_runs, ops_service_connections).
 --
+-- A few ops-runtime tables don't carry the ops_/kinsta_ prefix and so were
+-- missed by the prefix loop. The proven case: `client_run_subscriptions`, which
+-- the schedule-fanout endpoint reads (and the subscriptions API writes) — its
+-- absence here made POST /api/ops/internal/fanout 500 with
+-- "permission denied for table client_run_subscriptions", blocking daily run
+-- fanout. Such tables are added to the explicit `tablename IN (...)` list below.
+--
 -- This idempotent grant loop closes the gap and is safe to run on every deploy.
 -- Guarded on ops_app existing, so it's a no-op in local dev (which connects as a
 -- superuser and has no ops_app role). Keep this migration LAST so it covers every
@@ -16,7 +23,9 @@ BEGIN
     FOR r IN
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
-        AND (tablename LIKE 'ops\_%' OR tablename LIKE 'kinsta\_%')
+        AND (tablename LIKE 'ops\_%'
+             OR tablename LIKE 'kinsta\_%'
+             OR tablename IN ('client_run_subscriptions'))
     LOOP
       EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO ops_app', r.tablename);
     END LOOP;
