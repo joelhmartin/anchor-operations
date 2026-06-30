@@ -127,6 +127,57 @@ export async function linkClient({ clientId, fbPageId, createdBy }) {
 }
 
 /**
+ * Grant the agency system user access to a Page the BM can't yet reach.
+ *
+ * POST /{pageId}/assigned_users with the system user id + tasks, authenticated
+ * with the system-user token. After this succeeds the Page shows up in
+ * listAccessiblePages() and can be linked normally.
+ *
+ * Prerequisites (Meta-side, NOT enforceable here):
+ *  - The Page must already be claimed by / shared into the agency Business Manager.
+ *  - FACEBOOK_SYSTEM_USER_TOKEN must carry `business_management` +
+ *    `pages_manage_metadata` scopes (a plain page token will be rejected).
+ *
+ * systemUserId comes from FACEBOOK_SYSTEM_USER_ID; if unset we resolve it from
+ * GET /me with the system-user token.
+ *
+ * @param {{ pageId: string, systemUserId?: string, tasks?: string[] }} args
+ */
+export async function assignSystemUserToPage({ pageId, systemUserId, tasks = ['CREATE_CONTENT', 'MANAGE'] }) {
+  if (!pageId) {
+    const err = new Error('pageId is required');
+    err.code = 'INVALID_ARGS';
+    throw err;
+  }
+  const systemToken = process.env.FACEBOOK_SYSTEM_USER_TOKEN;
+  if (!systemToken) {
+    const err = new Error('FACEBOOK_SYSTEM_USER_TOKEN is not configured');
+    err.code = 'META_NOT_CONFIGURED';
+    throw err;
+  }
+
+  let userId = systemUserId || process.env.FACEBOOK_SYSTEM_USER_ID;
+  if (!userId) {
+    const me = await graph('me', { params: { fields: 'id', access_token: systemToken } });
+    userId = me?.id;
+  }
+  if (!userId) {
+    const err = new Error('Could not resolve system user id (set FACEBOOK_SYSTEM_USER_ID)');
+    err.code = 'META_SYSTEM_USER_UNKNOWN';
+    throw err;
+  }
+
+  return graph(`${pageId}/assigned_users`, {
+    method: 'POST',
+    params: {
+      user: userId,
+      tasks: JSON.stringify(tasks),
+      access_token: systemToken
+    }
+  });
+}
+
+/**
  * Resolve a decrypted page token by page_link id. Lazily re-fetches from the
  * system user if the encrypted column is missing (e.g. after a forced clear).
  */

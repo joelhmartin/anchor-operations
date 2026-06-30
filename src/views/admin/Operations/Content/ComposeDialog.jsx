@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Stack,
   Typography,
@@ -10,7 +10,8 @@ import {
   RadioGroup,
   Radio,
   Alert,
-  Autocomplete
+  Autocomplete,
+  Button
 } from '@mui/material';
 import dayjs from 'dayjs';
 import { LocalizationProvider, MobileDateTimePicker } from '@mui/x-date-pickers';
@@ -18,7 +19,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import FormDialog from 'ui-component/extended/FormDialog';
 import SelectField from 'ui-component/extended/SelectField';
 import FacebookPostPreview from 'ui-component/extended/FacebookPostPreview';
-import { getClientPages, createPost } from 'api/social';
+import { getClientPages, createPost, getSystemPages, setPagePublishing } from 'api/social';
 import { useToast } from 'contexts/ToastContext';
 import MediaPicker from './MediaPicker';
 import { clientLabel } from 'hooks/useClientLabel';
@@ -30,12 +31,15 @@ const IG_HASHTAG_MAX = 30;
 const FB_CAPTION_HARD_MAX = 63206;
 const FB_CAPTION_SOFT_MAX = 5000; // readability — gets truncated in feed
 
-export default function ComposeDialog({ open, onClose, clients = [], presetDate = null, onCreated }) {
+export default function ComposeDialog({ open, onClose, clients = [], activeClientId = null, presetDate = null, onCreated }) {
   const toast = useToast();
 
   const [clientPages, setClientPages] = useState([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [clientId, setClientId] = useState('');
+  const [systemPages, setSystemPages] = useState([]);
+  const [linkFbPageId, setLinkFbPageId] = useState('');
+  const [linking, setLinking] = useState(false);
   const [selectedFbPageId, setSelectedFbPageId] = useState('');
   const [platforms, setPlatforms] = useState({ facebook: true, instagram: false });
   const [content, setContent] = useState('');
@@ -49,9 +53,10 @@ export default function ComposeDialog({ open, onClose, clients = [], presetDate 
   // Reset on open
   useEffect(() => {
     if (!open) return;
-    setClientId('');
+    setClientId(activeClientId || '');
     setSelectedFbPageId('');
     setClientPages([]);
+    setLinkFbPageId('');
     setPlatforms({ facebook: true, instagram: false });
     setContent('');
     setLinkUrl('');
@@ -66,7 +71,31 @@ export default function ComposeDialog({ open, onClose, clients = [], presetDate 
     setIdempotencyKey(
       typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
     );
-  }, [open, presetDate]);
+  }, [open, presetDate, activeClientId]);
+
+  // Loader for a client's enabled publishing pages — reusable so we can refresh
+  // after linking a Page from the system user's accessible set.
+  const loadClientPages = useCallback(async (id) => {
+    if (!id) {
+      setClientPages([]);
+      setSelectedFbPageId('');
+      return;
+    }
+    setPagesLoading(true);
+    try {
+      const pages = await getClientPages(id);
+      const enabled = (pages || []).filter((p) => p.publishing_enabled);
+      setClientPages(enabled);
+      // Auto-select if exactly one option
+      if (enabled.length === 1) setSelectedFbPageId(enabled[0].fb_page_id);
+      else setSelectedFbPageId('');
+    } catch {
+      setClientPages([]);
+      setSelectedFbPageId('');
+    } finally {
+      setPagesLoading(false);
+    }
+  }, []);
 
   // Load pages whenever the picked client changes
   useEffect(() => {
@@ -76,29 +105,46 @@ export default function ComposeDialog({ open, onClose, clients = [], presetDate 
       return;
     }
     let cancelled = false;
-    setPagesLoading(true);
-    getClientPages(clientId)
-      .then((pages) => {
-        if (cancelled) return;
-        const enabled = (pages || []).filter((p) => p.publishing_enabled);
-        setClientPages(enabled);
-        // Auto-select if exactly one option
-        if (enabled.length === 1) setSelectedFbPageId(enabled[0].fb_page_id);
-        else setSelectedFbPageId('');
+    (async () => {
+      await loadClientPages(clientId);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, clientId, loadClientPages]);
+
+  // When a scoped client has no enabled pages, load the system user's Pages so
+  // staff can link one. Lazy — only fetched when the linker is actually needed.
+  useEffect(() => {
+    if (!open || !clientId || pagesLoading || clientPages.length > 0) return;
+    let cancelled = false;
+    getSystemPages()
+      .then((rows) => {
+        if (!cancelled) setSystemPages(rows || []);
       })
       .catch(() => {
-        if (!cancelled) {
-          setClientPages([]);
-          setSelectedFbPageId('');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPagesLoading(false);
+        if (!cancelled) setSystemPages([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [open, clientId]);
+  }, [open, clientId, pagesLoading, clientPages.length]);
+
+  const handleLinkPage = async () => {
+    if (!clientId || !linkFbPageId) return;
+    setLinking(true);
+    try {
+      await setPagePublishing(clientId, linkFbPageId, true);
+      toast.success('Facebook Page linked');
+      setLinkFbPageId('');
+      await loadClientPages(clientId);
+    } catch (e) {
+      toast.error(`Could not link Page: ${e.response?.data?.error || e.message}`);
+    } finally {
+      setLinking(false);
+    }
+  };
 
   const selectedPage = useMemo(
     () => clientPages.find((p) => p.fb_page_id === selectedFbPageId) || null,
@@ -212,10 +258,26 @@ export default function ComposeDialog({ open, onClose, clients = [], presetDate 
     }
     if (clientPages.length === 0) {
       return (
-        <Alert severity="info">
-          This client has no enabled publishing pages. Open the client drawer → OAuth Integrations and
-          flip the &quot;Publishing&quot; switch on a connected Facebook Page.
-        </Alert>
+        <Stack spacing={1}>
+          <Alert severity="info">
+            This client has no linked Facebook Page yet. Pick one of the agency&apos;s Pages below to link it
+            for publishing.
+          </Alert>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Autocomplete
+              sx={{ flex: 1 }}
+              options={systemPages}
+              value={systemPages.find((p) => p.id === linkFbPageId) || null}
+              onChange={(_e, v) => setLinkFbPageId(v?.id || '')}
+              getOptionLabel={(opt) => (opt ? (opt.instagram ? `${opt.name} (IG: @${opt.instagram})` : opt.name) : '')}
+              isOptionEqualToValue={(opt, val) => opt.id === val?.id}
+              renderInput={(params) => <TextField {...params} label="Link this client's Facebook Page" />}
+            />
+            <Button variant="contained" onClick={handleLinkPage} disabled={!linkFbPageId || linking}>
+              {linking ? 'Linking…' : 'Link'}
+            </Button>
+          </Stack>
+        </Stack>
       );
     }
     if (clientPages.length === 1) {
@@ -253,18 +315,28 @@ export default function ComposeDialog({ open, onClose, clients = [], presetDate 
       submitDisabled={submitDisabled}
       onSubmit={handleSubmit}
     >
-      <Autocomplete
-        size="small"
-        options={clients}
-        getOptionLabel={clientLabel}
-        isOptionEqualToValue={(opt, val) => opt.id === val.id}
-        value={clients.find((c) => c.id === clientId) || null}
-        onChange={(_, v) => {
-          setClientId(v ? v.id : '');
-          setSelectedFbPageId('');
-        }}
-        renderInput={(params) => <TextField {...params} label="Client" required />}
-      />
+      {activeClientId ? (
+        <TextField
+          label="Client"
+          value={selectedClient ? clientLabel(selectedClient) : ''}
+          InputProps={{ readOnly: true }}
+          disabled
+          fullWidth
+        />
+      ) : (
+        <Autocomplete
+          size="small"
+          options={clients}
+          getOptionLabel={clientLabel}
+          isOptionEqualToValue={(opt, val) => opt.id === val.id}
+          value={clients.find((c) => c.id === clientId) || null}
+          onChange={(_, v) => {
+            setClientId(v ? v.id : '');
+            setSelectedFbPageId('');
+          }}
+          renderInput={(params) => <TextField {...params} label="Client" required />}
+        />
+      )}
       {isMedical && (
         <Alert severity="warning">
           Medical client — captions are public and must not contain PHI (patient names, conditions, photos, contact

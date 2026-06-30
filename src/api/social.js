@@ -4,6 +4,11 @@ export function listPages() {
   return client.get('/social/pages').then((r) => r.data);
 }
 
+// System user's accessible FB Pages (no tokens) — for the ComposeDialog linker.
+export function getSystemPages() {
+  return client.get('/social/system-pages').then((r) => r.data);
+}
+
 export function listLinks() {
   return client.get('/social/links').then((r) => r.data);
 }
