@@ -35,14 +35,37 @@ test('gsc.connection_health: skipped when no token', async () => {
   assert.ok(r.payload.reason);
 });
 
-test('gsc.connection_health: error on listSites failure', async () => {
+test('gsc.connection_health: skipped (not error/critical) when listSites returns 403', async () => {
+  const err403 = Object.assign(new Error('GSC sites.list 403'), { status: 403 });
   const h = makeConnectionHealthCheck({
     resolveToken: async () => 'tok',
-    listSites: async () => { throw new Error('GSC 403'); }
+    listSites: async () => { throw err403; }
+  });
+  const r = await h(CTX);
+  assert.equal(r.status, 'skipped');
+  assert.ok(r.payload.reason.includes('40x'), 'reason should mention 40x');
+});
+
+test('gsc.connection_health: skipped (not error/critical) when listSites returns 401', async () => {
+  const err401 = Object.assign(new Error('GSC sites.list 401'), { status: 401 });
+  const h = makeConnectionHealthCheck({
+    resolveToken: async () => 'tok',
+    listSites: async () => { throw err401; }
+  });
+  const r = await h(CTX);
+  assert.equal(r.status, 'skipped');
+  assert.ok(r.payload.reason.includes('40x'), 'reason should mention 40x');
+});
+
+test('gsc.connection_health: error/warning (not critical) on non-auth listSites failure', async () => {
+  const h = makeConnectionHealthCheck({
+    resolveToken: async () => 'tok',
+    listSites: async () => { throw new Error('network timeout'); }
   });
   const r = await h(CTX);
   assert.equal(r.status, 'error');
-  assert.equal(r.severity, 'critical');
+  assert.equal(r.severity, 'warning');
+  assert.ok(r.payload.error, 'should include error message');
 });
 
 // ── site_access_missing ──────────────────────────────────────────────────────
