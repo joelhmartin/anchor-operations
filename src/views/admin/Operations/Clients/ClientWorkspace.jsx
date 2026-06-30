@@ -10,6 +10,7 @@ import ClientChat from '../Chat/ClientChat';
 import ClientSitesPanel from './ClientSitesPanel';
 import ClientOverview from './ClientOverview';
 import ClientOpsView from './ClientOpsView';
+import ClientConnectionsPanel from './ClientConnectionsPanel';
 import ClientAgentProfileEditor from './ClientAgentProfileEditor';
 
 function SectionBody({ section, clientUserId, activeClient, setSection }) {
@@ -26,8 +27,9 @@ function SectionBody({ section, clientUserId, activeClient, setSection }) {
       return <ClientChat lockedClientUserId={clientUserId} />;
     case 'sites':
       return <ClientSitesPanel clientUserId={clientUserId} />;
-    case 'health':
     case 'connections':
+      return <ClientConnectionsPanel clientUserId={clientUserId} />;
+    case 'health':
     case 'runs':
     case 'cost':
       return (
