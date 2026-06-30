@@ -11,6 +11,7 @@ import { checkPubSubTopics, listTopicShortNames } from './pubsubAccess.js';
 import { classifyService, rollupStatus, summarize } from './statusClassifier.js';
 import { createAuditRun as createAuditRunDefault, finishAuditRun as finishAuditRunDefault } from './auditStore.js';
 import { computeClientCoverage as computeClientCoverageDefault } from './clientCoverage.js';
+import { runLiveVerifiers as runLiveVerifiersDefault } from './liveVerify.js';
 
 async function safe(fn, onError) {
   try {
@@ -31,7 +32,8 @@ export async function runAccessAudit(deps = {}) {
     pubsubClient = undefined, // undefined → build a real client; null → skip
     createAuditRun = createAuditRunDefault,
     finishAuditRun = finishAuditRunDefault,
-    computeClientCoverage = computeClientCoverageDefault
+    computeClientCoverage = computeClientCoverageDefault,
+    runLiveVerifiers = runLiveVerifiersDefault
   } = deps;
 
   const run = await createAuditRun();
@@ -68,6 +70,10 @@ export async function runAccessAudit(deps = {}) {
   if (pubsub.status === 'skipped' && pubsubClient !== null) {
     warnings.push('pubsub: topic listing skipped');
   }
+
+  // --- live verification (real API calls where creds exist; overrides presence) ---
+  const live = await safe(() => runLiveVerifiers(env), () => ({}));
+  for (const [name, r] of Object.entries(live)) services[name] = withColor(r);
 
   // --- client access coverage (real per-client connection state) ---
   const clientCoverage = await safe(
