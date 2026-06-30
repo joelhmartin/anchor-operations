@@ -51,6 +51,17 @@ export function getCustomerClient(customerId) {
 }
 
 /**
+ * List the customer IDs the agency refresh token can access (for the access
+ * audit). Returns an array of resource names (`customers/123...`), or null when
+ * agency credentials are not configured.
+ */
+export async function listAccessibleCustomerIds() {
+  if (!hasAgencyCredentials()) return null;
+  const res = await getClient().listAccessibleCustomers(REFRESH_TOKEN);
+  return Array.isArray(res?.resource_names) ? res.resource_names : [];
+}
+
+/**
  * Resolve the Google Ads customer_id configured for a client (via
  * tracking_configs). Returns the most-recent non-null value, or null if
  * the client has no Google Ads link.
