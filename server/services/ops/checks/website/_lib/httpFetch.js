@@ -17,7 +17,7 @@ import { assertPublicHttpUrl, SsrfBlockedError } from '../../../../security/ssrf
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 750_000;
 
-export { SsrfBlockedError };
+export { SsrfBlockedError, assertPublicHttpUrl };
 
 export async function safeHttpFetch(rawUrl, opts = {}) {
   const {

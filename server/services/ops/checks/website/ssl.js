@@ -14,7 +14,7 @@ import tls from 'node:tls';
 import { URL } from 'node:url';
 import { registerCheck } from '../registry.js';
 import { query } from '../../../../db.js';
-import { resolveClientWebsiteUrl } from './_lib/httpFetch.js';
+import { resolveClientWebsiteUrl, assertPublicHttpUrl, SsrfBlockedError } from './_lib/httpFetch.js';
 
 const HANDSHAKE_TIMEOUT_MS = 8_000;
 
@@ -75,6 +75,16 @@ async function getCertOutcome(ctx) {
       const websiteUrl = await resolveClientWebsiteUrl(query, ctx.clientUserId);
       if (!websiteUrl) {
         return { kind: 'skipped', reason: 'no website URL configured for client' };
+      }
+      // SSRF guard before the raw tls.connect — the resolved URL is stored config,
+      // not request input, but a typo'd/internal host must not drive a handshake.
+      try {
+        await assertPublicHttpUrl(websiteUrl);
+      } catch (err) {
+        if (err instanceof SsrfBlockedError) {
+          return { kind: 'skipped', reason: `website URL not publicly reachable: ${err.message}` };
+        }
+        throw err;
       }
       const cert = await probeCertificate(websiteUrl);
       return { kind: 'ok', websiteUrl, cert };

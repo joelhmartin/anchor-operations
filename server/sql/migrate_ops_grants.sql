@@ -10,7 +10,7 @@
 -- the schedule-fanout endpoint reads (and the subscriptions API writes) — its
 -- absence here made POST /api/ops/internal/fanout 500 with
 -- "permission denied for table client_run_subscriptions", blocking daily run
--- fanout. Such tables are listed in EXTRA_OPS_TABLES below.
+-- fanout. Such tables are added to the explicit `tablename IN (...)` list below.
 --
 -- This idempotent grant loop closes the gap and is safe to run on every deploy.
 -- Guarded on ops_app existing, so it's a no-op in local dev (which connects as a

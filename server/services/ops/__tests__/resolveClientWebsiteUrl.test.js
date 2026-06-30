@@ -31,6 +31,7 @@ test('sources primary_domain from kinsta_environments, not kinsta_sites', async 
   await resolveClientWebsiteUrl(query, 'client-1');
   const { sql } = query.calls[0];
   assert.match(sql, /kinsta_environments/, 'must read primary_domain from kinsta_environments');
+  assert.match(sql, /is_live\s*=\s*TRUE/i, 'must filter to the live environment (never a staging domain)');
   assert.doesNotMatch(
     sql,
     /\bks\.primary_domain\b/,
