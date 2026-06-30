@@ -30,6 +30,7 @@ import { checkRateLimit, recordAttempt } from '../services/security/rateLimit.js
 import { listAllChecks } from '../services/ops/checks/registry.js';
 import { runAccessAudit } from '../services/ops/access/accessAudit.js';
 import { getLatestAuditRun } from '../services/ops/access/auditStore.js';
+import { notifyAccessAuditToChat } from '../services/ops/access/notifyAccessAudit.js';
 import { listOpsClientRoster, opsClientExistsExpression, opsClientLabelExpression } from '../services/ops/clientRoster.js';
 import {
   listSkills,
@@ -126,6 +127,15 @@ router.post('/access/audit/run', async (_req, res) => {
     res.json({ audit });
   } catch (err) {
     res.status(500).json({ error: 'access_audit_run_failed', detail: err?.message });
+  }
+});
+
+router.post('/access/audit/notify', async (_req, res) => {
+  try {
+    const result = await notifyAccessAuditToChat();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'access_audit_notify_failed', detail: err?.message });
   }
 });
 

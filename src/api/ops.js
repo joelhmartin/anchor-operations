@@ -14,6 +14,8 @@ export const getAccessAudit = () => client.get('/ops/access/audit').then((res) =
 
 export const runAccessAudit = () => client.post('/ops/access/audit/run').then((res) => res.data?.audit || null);
 
+export const notifyAccessAudit = () => client.post('/ops/access/audit/notify').then((res) => res.data);
+
 export const listOpsRuns = (params = {}) => client.get('/ops/runs', { params }).then((res) => res.data || []);
 
 export const getOpsRun = (runId) => client.get(`/ops/runs/${runId}`).then((res) => res.data);
