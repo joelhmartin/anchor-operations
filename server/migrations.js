@@ -48,7 +48,7 @@ const MIGRATIONS_BEFORE_SEED = [
   'migrate_ops_gsc_run_definitions.sql'
 ];
 
-const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql', 'migrate_ops_run_definition_model.sql', 'migrate_ops_f2_inventory_columns.sql', 'migrate_ops_client_agent_profiles.sql', 'migrate_ops_grants.sql'];
+const MIGRATIONS_AFTER_SEED = ['migrate_ops_recipes.sql', 'migrate_ops_skill_model.sql', 'migrate_ops_run_definition_model.sql', 'migrate_ops_f2_inventory_columns.sql', 'migrate_ops_client_agent_profiles.sql', 'migrate_ops_v5_baseline_run_definition.sql', 'migrate_ops_grants.sql'];
 
 async function runFile(file, { throwOnError = false } = {}) {
   try {

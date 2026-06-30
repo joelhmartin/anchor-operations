@@ -100,10 +100,22 @@ export function evaluateRules({ checks, rules = RULES }) {
       console.warn(`[ops/correlator] rule ${rule.name} linkedCheckResultIds() threw: ${err.message}`);
     }
 
+    // `severity` may be a static string OR a function of the matched checks
+    // (V5 snapshot anomaly mirrors the check's own warning/critical severity).
+    let severity = rule.severity;
+    if (typeof rule.severity === 'function') {
+      try {
+        severity = rule.severity({ checks });
+      } catch (err) {
+        console.warn(`[ops/correlator] rule ${rule.name} severity() threw: ${err.message}`);
+        severity = 'warning';
+      }
+    }
+
     findings.push({
       name: rule.name,
       category: rule.category,
-      severity: rule.severity,
+      severity,
       summary,
       evidence,
       linkedCheckResultIds

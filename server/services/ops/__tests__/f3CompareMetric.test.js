@@ -44,3 +44,20 @@ test('compareMetric: equal value → flat', () => {
   assert.equal(r.direction, 'flat');
   assert.equal(r.delta, 0);
 });
+
+test('I2: sub-epsilon baseline does not explode pct_change into a false ratio', () => {
+  // A baseline of 1e-12 with observed 5 would yield pct_change ~5e12 (and a
+  // false critical). The near-zero guard treats it as "no ratio" instead.
+  const r = compareMetric(5, { baseline_value: 1e-12, stddev: null, sample_count: 8 });
+  assert.equal(r.comparable, true);
+  assert.equal(r.pct_change, null);
+  assert.equal(r.direction, 'up');
+});
+
+test('I2: sub-epsilon stddev does not explode z_score into a false ratio', () => {
+  // A near-zero stddev would make z = (obs-base)/sd blow up; guard returns null.
+  const r = compareMetric(51, { baseline_value: 50, stddev: 1e-12, sample_count: 8 });
+  assert.equal(r.comparable, true);
+  assert.equal(r.z_score, null);
+  assert.equal(r.pct_change, 0.02);
+});

@@ -30,6 +30,7 @@ import './checks/meta/index.js';
 import './checks/ctm/index.js';
 import './checks/ga4/index.js';
 import './checks/gtm/index.js'; // F9 RECONCILE: gtm.container_health via serviceCategory+provider
+import './checks/snapshots/index.js'; // V5: snapshot.metric_anomaly (baseline deviation)
 
 const DEFAULT_CHECK_TIMEOUT_MS = 60_000;
 
