@@ -21,3 +21,10 @@ test('runLiveVerifiers default includes kinsta and returns missing offline', asy
   const out = await runLiveVerifiers({});
   assert.equal(out.kinsta.status, 'missing');
 });
+
+test('checkCtm/checkMeta/checkMailgun: no creds → missing (no network)', async () => {
+  const { checkCtm, checkMeta, checkMailgun } = await import('../access/liveVerify.js');
+  assert.equal((await checkCtm({})).status, 'missing');
+  assert.equal((await checkMeta({})).status, 'missing');
+  assert.equal((await checkMailgun({})).status, 'missing');
+});
