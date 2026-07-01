@@ -11,8 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { evaluateRules } from '../correlator.js';
-import RULES from '../correlatorRules.js';
+import { evaluateRules, RULES } from '../correlatorEval.js';
 import { sanitize } from '../payloadSanitizer.js';
 
 function makeCheck({ id, check_id, status = 'pass', severity = null, payload_json = {}, umbrella = 'website' }) {
