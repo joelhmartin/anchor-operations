@@ -22,7 +22,7 @@ async function alreadyAlerted(findingId, queryFn) {
   const { rows } = await queryFn(
     `SELECT 1
        FROM ops_notification_events
-      WHERE event_type = 'critical_alert' AND reference_id = $1
+      WHERE event_type = 'critical_alert' AND reference_id = $1 AND status = 'sent'
       LIMIT 1`,
     [findingId]
   );
