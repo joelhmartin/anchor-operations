@@ -5,6 +5,7 @@ import { listOpsClients, getCommandCenter } from 'api/ops';
 export const CLIENT_SECTIONS = [
   { value: 'overview', label: 'Overview' },
   { value: 'findings', label: 'Findings' },
+  { value: 'recommendations', label: 'Action Queue' },
   { value: 'socials', label: 'Socials' },
   { value: 'blog', label: 'Blog' },
   { value: 'sites', label: 'Sites' },

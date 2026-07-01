@@ -5,6 +5,7 @@ import { useOpsWorkspace, CLIENT_SECTIONS, CONFIG_SECTIONS } from '../OpsWorkspa
 import { clientLabel } from '../_clientLabel';
 import EmptyState from 'ui-component/extended/EmptyState';
 import DiscoveriesTab from '../Discoveries/DiscoveriesTab';
+import RecommendationsTab from '../Recommendations/RecommendationsTab';
 import ContentTab from '../Content/ContentTab';
 import ClientChat from '../Chat/ClientChat';
 import ClientSitesPanel from './ClientSitesPanel';
@@ -19,6 +20,8 @@ function SectionBody({ section, clientUserId, activeClient, setSection }) {
       return <ClientOverview clientUserId={clientUserId} />;
     case 'findings':
       return <DiscoveriesTab activeClientId={clientUserId} onOpenDiscovery={() => {}} onOpenRun={() => {}} />;
+    case 'recommendations':
+      return <RecommendationsTab activeClientId={clientUserId} />;
     case 'socials':
       return <ContentTab activeClientId={clientUserId} mode="social" />;
     case 'blog':
