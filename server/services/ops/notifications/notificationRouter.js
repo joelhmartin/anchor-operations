@@ -4,6 +4,7 @@
  * All DB reads are injectable for testing.
  */
 import { query } from '../../../db.js';
+import { clientLabelExpression, clientLabelJoins } from '../../clientLabel.js';
 import { resolveClientWebhookUrl, sendWebhookMessage } from './googleChatWebhook.js';
 import {
   renderDailyDigestCard,
@@ -13,10 +14,16 @@ import {
 } from './renderGoogleChatDigest.js';
 
 async function loadClientName(clientUserId, queryFn = query) {
+  // Use the canonical client-label resolver (server/services/clientLabel.js) so
+  // this references only columns that actually exist in prod. The previous query
+  // hit cp.business_name / u.name — neither of which exists — so every send threw
+  // "column cp.business_name does not exist" before posting. The canonical chain
+  // is: client_profiles.client_identifier_value → brand_assets.business_name →
+  // users.first_name + last_name → users.email → 'Client <id8>'.
   const { rows } = await queryFn(
-    `SELECT COALESCE(cp.business_name, u.name, u.email) AS display_name
+    `SELECT ${clientLabelExpression()} AS display_name
        FROM users u
-       LEFT JOIN client_profiles cp ON cp.user_id = u.id
+       ${clientLabelJoins('u.id')}
       WHERE u.id = $1 LIMIT 1`,
     [clientUserId]
   );
@@ -80,9 +87,13 @@ export async function sendDailyDigest({ clientUserId, runId }, deps = {}) {
 }
 
 export async function sendCriticalAlert({ clientUserId, findingId }, deps = {}) {
-  const { resolveWebhookUrl = resolveClientWebhookUrl, queryFn = query } = deps;
+  const { queryFn = query } = deps;
 
-  const webhookUrl = await resolveWebhookUrl(clientUserId);
+  // Critical alerts are agency-internal only — always posted to the agency
+  // default Chat space (GOOGLE_CHAT_WEBHOOK_DEFAULT), same as sendAgencyChatDigest.
+  // Never routed to a per-client webhook to avoid leaking finding details to
+  // a client's space.
+  const webhookUrl = deps.defaultWebhookUrl || process.env.GOOGLE_CHAT_WEBHOOK_DEFAULT;
   if (!webhookUrl) return { skipped: true, reason: 'no_webhook_url' };
 
   const clientName = await loadClientName(clientUserId, queryFn);

@@ -714,6 +714,15 @@ export async function executeRun(runId, options = {}) {
     console.warn(`[ops/executor] correlator skipped: ${err.message}`);
   }
 
+  // V8 — post any CRITICAL findings to the agency Google Chat space. Guarded so
+  // a Chat error never fails the run (mirrors the email-digest hook below).
+  try {
+    const critical = await import('./notifications/criticalAlerts.js').catch(() => null);
+    if (critical?.notifyCriticalFindings) await critical.notifyCriticalFindings({ runId });
+  } catch (err) {
+    console.warn(`[ops/executor] critical Chat alerts skipped: ${err.message}`);
+  }
+
   try {
     const reporter = await import('./reportRenderer.js').catch(() => null);
     if (reporter?.render) await reporter.render(runId);
