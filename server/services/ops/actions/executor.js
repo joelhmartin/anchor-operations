@@ -73,6 +73,17 @@ export async function executeAction({ recommendationId, userId, actorIsAdmin = t
     return { ok: false, status: rec.status, error: `recommendation already ${rec.status}` };
   }
 
+  // Advisory recommendations (non-mutating / no mapped action) have nothing to
+  // execute — "Approve" means Acknowledge. Record the audit trail and mark the
+  // rec executed (no-op) instead of failing on a null action resolve.
+  if (!rec.mutating || !rec.abstract_action_type) {
+    await audit.auditApproved({ userId, recommendationId, approvalId: rec.approval_id, providerActionType: null });
+    await audit.auditExecuted({ userId, recommendationId, approvalId: rec.approval_id, providerActionType: null, success: true });
+    if (rec.approval_id) await finalizeApproval(rec.approval_id, { ok: true, advisory: true });
+    await setRecommendationResult(recommendationId, { status: 'executed', executedAt: new Date() });
+    return { ok: true, status: 'executed', advisory: true };
+  }
+
   const norm = {
     abstractActionType: rec.abstract_action_type,
     mutating: rec.mutating,

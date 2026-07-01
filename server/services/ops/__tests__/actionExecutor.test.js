@@ -90,6 +90,23 @@ test('capabilities loaded from connectionStore shape flows to resolveAction', as
   assert.deepEqual(capsSeen, [{ provider: 'kinsta', capabilities: ['clear_cache'] }]);
 });
 
+test('advisory recommendation: Approve = acknowledge → executed + audit rows, no resolve/execute', async () => {
+  const h = harness({ mutating: false, abstract_action_type: null, approval_level: 'none', approval_id: null, status: 'proposed' });
+  let resolved = false, executed = false;
+  h.deps.resolve = async () => { resolved = true; return { ok: false, reason: 'should not be called' }; };
+  h.connector.actions.execute = async () => { executed = true; return {}; };
+  const out = await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+  assert.equal(out.ok, true);
+  assert.equal(out.status, 'executed');
+  assert.equal(out.advisory, true);
+  assert.equal(resolved, false, 'null action never resolved');
+  assert.equal(executed, false, 'connector.execute never called');
+  assert.equal(h.result.value.status, 'executed');
+  const types = h.events.map((e) => e[0]);
+  assert.deepEqual(types, ['approved', 'executed'], 'audit chain recorded for acknowledge');
+  assert.equal(h.events.find((e) => e[0] === 'executed')[1].success, true);
+});
+
 test('executeAction: finalized status is not re-executable (executor-level defense)', async () => {
   for (const finalStatus of ['executed', 'rejected', 'failed']) {
     const h = harness({ status: finalStatus });
