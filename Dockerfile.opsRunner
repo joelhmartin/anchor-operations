@@ -16,9 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package.json yarn.lock .yarnrc.yml ./
+# Vendored Yarn invoked directly — never depend on corepack downloading Yarn at
+# build time (that download fails in constrained Cloud Build networks, and the
+# release file isn't present unless we COPY it). Mirrors the main Dockerfile.
+COPY .yarn/releases ./.yarn/releases
 
-RUN corepack enable \
-  && yarn install --immutable
+RUN node .yarn/releases/yarn-4.10.3.cjs install --immutable
 
 COPY . .
 
