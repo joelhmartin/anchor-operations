@@ -132,7 +132,7 @@ export const listRecommendations = (clientId, status) =>
     .then((res) => res.data?.recommendations || []);
 
 export const buildRecommendations = (clientId) =>
-  client.post(`/ops/clients/${clientId}/recommendations/build`).then((res) => res.data?.recommendations || []);
+  client.post(`/ops/clients/${clientId}/recommendations/build`).then((res) => res.data);
 
 export const approveRecommendation = (recId) =>
   client.post(`/ops/recommendations/${recId}/approve`).then((res) => res.data);

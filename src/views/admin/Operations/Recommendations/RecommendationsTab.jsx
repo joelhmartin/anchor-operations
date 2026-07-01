@@ -48,7 +48,7 @@ function titleCase(value) {
 
 function RecommendationCard({ rec, onApprove, onReject, busy }) {
   const isAdvisory = rec.approval_level === 'none';
-  const actionable = rec.status === 'proposed';
+  const actionable = rec.status === 'proposed' && rec.approval_level !== 'blocked';
   const findingCount = Array.isArray(rec.finding_ids) ? rec.finding_ids.length : 0;
 
   return (
@@ -158,11 +158,16 @@ export default function RecommendationsTab({ activeClientId }) {
     try {
       await buildRecommendations(activeClientId);
       showToast('Recommendations generated from open findings', 'success');
-      await load();
     } catch (err) {
       showToast(`Build failed: ${err.response?.data?.detail || err.response?.data?.message || err.message}`, 'error');
-    } finally {
       setBuilding(false);
+      return;
+    }
+    setBuilding(false);
+    try {
+      await load();
+    } catch {
+      // refresh failure — action already succeeded
     }
   };
 
@@ -171,11 +176,16 @@ export default function RecommendationsTab({ activeClientId }) {
     try {
       await approveRecommendation(rec.id);
       showToast(rec.approval_level === 'none' ? 'Recommendation acknowledged' : 'Recommendation approved', 'success');
-      await load();
     } catch (err) {
       showToast(`Approve failed: ${err.response?.data?.detail || err.response?.data?.message || err.message}`, 'error');
-    } finally {
       setActioningId(null);
+      return;
+    }
+    setActioningId(null);
+    try {
+      await load();
+    } catch {
+      // refresh failure — action already succeeded
     }
   };
 
@@ -187,11 +197,16 @@ export default function RecommendationsTab({ activeClientId }) {
       showToast('Recommendation rejected', 'success');
       setRejectTarget(null);
       setRejectReason('');
-      await load();
     } catch (err) {
       showToast(`Reject failed: ${err.response?.data?.detail || err.response?.data?.message || err.message}`, 'error');
-    } finally {
       setRejectSubmitting(false);
+      return;
+    }
+    setRejectSubmitting(false);
+    try {
+      await load();
+    } catch {
+      // refresh failure — action already succeeded
     }
   };
 
