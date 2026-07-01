@@ -1,0 +1,35 @@
+# Cloud Build config for the anchor-ops-runner Cloud Run Job image.
+#
+# Builds the server-only runner image from Dockerfile.opsRunner on Cloud Build's
+# amd64 workers (a local `docker build` on Apple Silicon yields arm64, which
+# Cloud Run rejects) and pushes it to the existing Artifact Registry repo
+# `cloud-run-source-deploy`.
+#
+# Usage:
+#   gcloud builds submit --config=cloudbuild.opsrunner.yaml \
+#     --substitutions=_TAG=$(git rev-parse --short HEAD) \
+#     --project=anchor-hub-480305
+#
+# _TAG defaults to "latest" if not supplied.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: cloud-run-source-deploy
+  _IMAGE: anchor-ops-runner
+  _TAG: latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.opsRunner
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_TAG}
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_TAG}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

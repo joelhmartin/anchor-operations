@@ -3,13 +3,22 @@ set -euo pipefail
 # Build + push + deploy the anchor-ops-runner Cloud Run JOB.
 # Consumes the Pub/Sub `ops-runner` subscription; executes one run per message.
 #   ./scripts/gdeploy-ops-runner.sh [--dry-run]
+#
+# The image is built on Cloud Build (amd64) — a local `docker build` on an
+# Apple-Silicon Mac produces arm64, which Cloud Run rejects. See
+# cloudbuild.opsrunner.yaml.
 
 PROJECT_ID="anchor-hub-480305"
 REGION="us-central1"
 JOB_NAME="anchor-ops-runner"
-ARTIFACT_REPO_NAME="anchor-hub-repo"
+# Reuse the existing Artifact Registry repo that already backs Cloud Run source
+# deploys. (The old `anchor-hub-repo` repo does not exist.)
+ARTIFACT_REPO_NAME="cloud-run-source-deploy"
 IMAGE_NAME="anchor-ops-runner"
-SERVICE_ACCOUNT_EMAIL="anchor-ops@${PROJECT_ID}.iam.gserviceaccount.com"
+# The Compute Engine default SA already runs the live service and has DB +
+# Secret Manager + reports-bucket access. (The old `anchor-ops@…` SA does not
+# exist.)
+SERVICE_ACCOUNT_EMAIL="333281424614-compute@developer.gserviceaccount.com"
 CLOUD_SQL_INSTANCE="${PROJECT_ID}:${REGION}:anchor"
 
 DRY_RUN="false"; [[ "${1:-}" == "--dry-run" ]] && DRY_RUN="true"
@@ -38,17 +47,21 @@ SECRETS+=",GA4_SERVICE_ACCOUNT_KEY=GA4_SERVICE_ACCOUNT_KEY:latest"
 ENVVARS="NODE_ENV=production,OPS_RUN_SUBSCRIPTION=ops-runner,OPS_RUNNER_CONCURRENCY=4"
 ENVVARS+=",GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_REGION=${REGION}"
 ENVVARS+=",VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION}"
-ENVVARS+=",OPS_REPORTS_BUCKET=anchor-ops-reports-${PROJECT_ID}"
+# This bucket exists and compute@ has objectAdmin on it. (The old
+# `anchor-ops-reports-${PROJECT_ID}` bucket does not exist.)
+ENVVARS+=",OPS_REPORTS_BUCKET=anchor-hub-ops-reports"
 
 echo "=== Deploy Job ${JOB_NAME} (dry-run=${DRY_RUN}) image=${IMG} ==="
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "[dry-run] docker build -f Dockerfile.opsRunner -t ${IMG} . && push && gcloud run jobs deploy ${JOB_NAME} ..."
+  echo "[dry-run] gcloud builds submit --config=cloudbuild.opsrunner.yaml --substitutions=_TAG=${IMAGE_TAG} && gcloud run jobs deploy ${JOB_NAME} ..."
   exit 0
 fi
 
-docker build -f Dockerfile.opsRunner -t "${IMG}" .
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-docker push "${IMG}"
+# Build amd64 on Cloud Build and push to Artifact Registry.
+gcloud builds submit \
+  --project="${PROJECT_ID}" \
+  --config=cloudbuild.opsrunner.yaml \
+  --substitutions="_REGION=${REGION},_REPO=${ARTIFACT_REPO_NAME},_IMAGE=${IMAGE_NAME},_TAG=${IMAGE_TAG}"
 
 gcloud run jobs deploy "${JOB_NAME}" \
   --project="${PROJECT_ID}" --region="${REGION}" \
