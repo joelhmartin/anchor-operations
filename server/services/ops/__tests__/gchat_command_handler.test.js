@@ -43,6 +43,44 @@ test('handleCommand: approve via text returns instructional error', async () => 
   assert.ok(result.text.includes('button') || result.text.includes('Use the approval'));
 });
 
+// Regression: the client-name queries must reference only columns that exist in
+// prod. They previously hit cp.business_name / u.name (neither exists), so every
+// data command threw "column cp.business_name does not exist". They must now use
+// the canonical clientLabel columns (client_profiles.client_identifier_value, etc.).
+function capturingQuery() {
+  const sqls = [];
+  const fn = async (text) => { sqls.push(text); return { rows: [] }; };
+  fn.sqls = sqls;
+  return fn;
+}
+
+for (const command of ['clients', 'client', 'issues']) {
+  test(`handleCommand: ${command} uses canonical client-label columns, not phantom ones`, async () => {
+    const q = capturingQuery();
+    await handleCommand(
+      { command, args: ['Acme'], anchorUser: adminUser },
+      { queryFn: q }
+    );
+    const all = q.sqls.join('\n');
+    assert.ok(all.length > 0, 'ran at least one query');
+    assert.ok(!/\bcp\.business_name\b/.test(all), 'does not reference cp.business_name');
+    assert.ok(!/\bu\.name\b/.test(all), 'does not reference u.name');
+    assert.ok(/client_identifier_value/.test(all), 'uses the canonical client_identifier_value');
+  });
+}
+
+test('handleCommand: approvals uses canonical client-label columns', async () => {
+  const q = capturingQuery();
+  await handleCommand(
+    { command: 'approvals', args: [], anchorUser: adminUser },
+    { queryFn: q }
+  );
+  const all = q.sqls.join('\n');
+  assert.ok(!/\bcp\.business_name\b/.test(all), 'does not reference cp.business_name');
+  assert.ok(!/\bu\.name\b/.test(all), 'does not reference u.name');
+  assert.ok(/client_identifier_value/.test(all), 'uses the canonical client_identifier_value');
+});
+
 test('handleCommand: audit degrades gracefully when F0 not built', async () => {
   const result = await handleCommand(
     { command: 'audit', args: [], anchorUser: adminUser },

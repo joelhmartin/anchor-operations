@@ -35,7 +35,9 @@ export async function resolveGoogleChatUser(googleUserId, { queryFn = query } = 
   if (!mapping || !mapping.enabled) return null;
 
   const { rows: userRows } = await queryFn(
-    `SELECT u.id, u.role, u.name, u.email, u.created_at
+    `SELECT u.id, u.role,
+            COALESCE(NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), u.email) AS name,
+            u.email, u.created_at
        FROM users u
       WHERE u.id = $1 LIMIT 1`,
     [mapping.anchor_user_id]
