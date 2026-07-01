@@ -11,6 +11,7 @@
  * the webhook URL).
  */
 import { query } from '../../../db.js';
+import { clientLabelJoins } from '../../clientLabel.js';
 import { shapeHomeDigest } from '../homeDigest.js';
 import { sendWebhookMessage } from './googleChatWebhook.js';
 
@@ -51,9 +52,22 @@ export function renderAgencyDigestText(commandCenter, clientNames = {}) {
 export async function resolveClientNames(ids, queryFn = query) {
   if (!ids.length) return {};
   // Non-PII fallback — never egress a client's login email into the team space.
+  // `users.name` does NOT exist in prod (the real columns are first_name/last_name);
+  // referencing it made this query throw, so the digest silently fell back to
+  // 'Client <id8>' for everyone. Resolve the business/display name from the same
+  // columns the canonical clientLabel resolver uses, but deliberately stop before
+  // the email fallback so no login email is egressed into the team space.
   const { rows } = await queryFn(
-    `SELECT u.id AS user_id, COALESCE(NULLIF(u.name, ''), 'Client ' || left(u.id::text, 8)) AS name
-       FROM users u WHERE u.id = ANY($1::uuid[])`,
+    `SELECT u.id AS user_id,
+            COALESCE(
+              NULLIF(TRIM(cp.client_identifier_value), ''),
+              NULLIF(TRIM(ba.business_name), ''),
+              NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''),
+              'Client ' || left(u.id::text, 8)
+            ) AS name
+       FROM users u
+       ${clientLabelJoins('u.id')}
+      WHERE u.id = ANY($1::uuid[])`,
     [ids]
   );
   return Object.fromEntries(rows.map((r) => [r.user_id, r.name]));
