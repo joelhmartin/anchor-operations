@@ -3,6 +3,7 @@
  * All external I/O is injectable via deps for testing.
  */
 import { query } from '../../../db.js';
+import { clientLabelExpression, clientLabelJoins } from '../../clientLabel.js';
 import { enqueueRun } from '../runQueue.js';
 import {
   renderHelpCard, renderClientsCard, renderClientSummaryCard,
@@ -87,22 +88,22 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         const isAdmin = anchorUser.role === 'admin' || anchorUser.role === 'superadmin';
         const { rows } = isAdmin
           ? await queryFn(
-              `SELECT u.id, COALESCE(cp.business_name, u.name) AS name,
+              `SELECT u.id, ${clientLabelExpression()} AS name,
                       COUNT(f.id) FILTER (WHERE f.status NOT IN ('resolved','ignored')) AS open_findings
                  FROM users u
-                 LEFT JOIN client_profiles cp ON cp.user_id = u.id
+                 ${clientLabelJoins('u.id')}
                  LEFT JOIN ops_findings f ON f.client_user_id = u.id
-                GROUP BY u.id, cp.business_name, u.name
+                GROUP BY u.id, cp.client_identifier_value, ba.business_name
                 ORDER BY name LIMIT 20`
             )
           : await queryFn(
-              `SELECT u.id, COALESCE(cp.business_name, u.name) AS name,
+              `SELECT u.id, ${clientLabelExpression()} AS name,
                       COUNT(f.id) FILTER (WHERE f.status NOT IN ('resolved','ignored')) AS open_findings
                  FROM users u
-                 LEFT JOIN client_profiles cp ON cp.user_id = u.id
+                 ${clientLabelJoins('u.id')}
                  LEFT JOIN ops_findings f ON f.client_user_id = u.id
                 WHERE u.id = $1
-                GROUP BY u.id, cp.business_name, u.name
+                GROUP BY u.id, cp.client_identifier_value, ba.business_name
                 ORDER BY name LIMIT 20`,
               [anchorUser.id]
             );
@@ -113,9 +114,14 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         const name = args[0] || '';
         if (!name) return renderErrorCard('Usage: /anchorops client <name>');
         const { rows } = await queryFn(
-          `SELECT u.id, COALESCE(cp.business_name, u.name) AS name
-             FROM users u LEFT JOIN client_profiles cp ON cp.user_id = u.id
-            WHERE cp.business_name ILIKE $1 OR u.name ILIKE $1 LIMIT 1`,
+          `SELECT u.id, ${clientLabelExpression()} AS name
+             FROM users u
+             ${clientLabelJoins('u.id')}
+            WHERE cp.client_identifier_value ILIKE $1
+               OR ba.business_name ILIKE $1
+               OR (u.first_name || ' ' || u.last_name) ILIKE $1
+               OR u.email ILIKE $1
+            LIMIT 1`,
           [`%${name}%`]
         );
         const client = rows[0];
@@ -143,9 +149,14 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         const name = args[0] || '';
         if (!name) return renderErrorCard('Usage: /anchorops issues <name>');
         const { rows: cRows } = await queryFn(
-          `SELECT u.id, COALESCE(cp.business_name, u.name) AS name
-             FROM users u LEFT JOIN client_profiles cp ON cp.user_id = u.id
-            WHERE cp.business_name ILIKE $1 OR u.name ILIKE $1 LIMIT 1`,
+          `SELECT u.id, ${clientLabelExpression()} AS name
+             FROM users u
+             ${clientLabelJoins('u.id')}
+            WHERE cp.client_identifier_value ILIKE $1
+               OR ba.business_name ILIKE $1
+               OR (u.first_name || ' ' || u.last_name) ILIKE $1
+               OR u.email ILIKE $1
+            LIMIT 1`,
           [`%${name}%`]
         );
         const client = cRows[0];
@@ -179,10 +190,10 @@ export async function handleCommand({ command, args, anchorUser }, deps = {}) {
         try {
           const { rows } = await queryFn(
             `SELECT ar.id, ar.abstract_action_type AS action_type, ar.risk_tier AS risk_level, ar.summary,
-                    COALESCE(cp.business_name, u.name) AS client_name
+                    ${clientLabelExpression()} AS client_name
                FROM ops_action_recommendations ar
                LEFT JOIN users u ON u.id = ar.client_user_id
-               LEFT JOIN client_profiles cp ON cp.user_id = ar.client_user_id
+               ${clientLabelJoins('ar.client_user_id')}
               WHERE ar.status = 'proposed'
               ORDER BY ar.created_at DESC LIMIT 10`
           );
