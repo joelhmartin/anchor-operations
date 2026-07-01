@@ -66,7 +66,12 @@ function RecommendationCard({ rec, onApprove, onReject, busy }) {
                 color={RISK_COLORS[rec.risk_tier] || 'default'}
                 label={`Risk: ${titleCase(rec.risk_tier) || 'Unknown'}`}
               />
-              <Chip size="small" color={STATUS_COLORS[rec.status] || 'default'} label={titleCase(rec.status)} />
+              <Chip
+                size="small"
+                variant="outlined"
+                color={STATUS_COLORS[rec.status] || 'default'}
+                label={titleCase(rec.status)}
+              />
               <Chip size="small" variant="outlined" label={APPROVAL_LABELS[rec.approval_level] || rec.approval_level || 'Unknown'} />
               {rec.destructive && <Chip size="small" color="error" variant="outlined" label="Destructive" />}
             </Stack>
