@@ -123,3 +123,19 @@ export const getClientAgentProfile = (clientUserId) =>
 
 export const updateClientAgentProfile = (clientUserId, body) =>
   client.put(`/ops/clients/${clientUserId}/agent-profile`, body).then((r) => r.data);
+
+// ---------------- Action Queue — recommendations generated from findings ----------------
+
+export const listRecommendations = (clientId, status) =>
+  client
+    .get(`/ops/clients/${clientId}/recommendations`, { params: status ? { status } : {} })
+    .then((res) => res.data?.recommendations || []);
+
+export const buildRecommendations = (clientId) =>
+  client.post(`/ops/clients/${clientId}/recommendations/build`).then((res) => res.data);
+
+export const approveRecommendation = (recId) =>
+  client.post(`/ops/recommendations/${recId}/approve`).then((res) => res.data);
+
+export const rejectRecommendation = (recId, reason) =>
+  client.post(`/ops/recommendations/${recId}/reject`, { reason }).then((res) => res.data);
