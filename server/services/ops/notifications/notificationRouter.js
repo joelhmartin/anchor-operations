@@ -80,9 +80,16 @@ export async function sendDailyDigest({ clientUserId, runId }, deps = {}) {
 }
 
 export async function sendCriticalAlert({ clientUserId, findingId }, deps = {}) {
-  const { resolveWebhookUrl = resolveClientWebhookUrl, queryFn = query } = deps;
+  const {
+    resolveWebhookUrl = resolveClientWebhookUrl,
+    defaultWebhookUrl = process.env.GOOGLE_CHAT_WEBHOOK_DEFAULT,
+    queryFn = query
+  } = deps;
 
-  const webhookUrl = await resolveWebhookUrl(clientUserId);
+  // Critical alerts are agency-internal: prefer a per-client google_chat webhook
+  // if one exists, else fall back to the shared agency space (same destination
+  // as the V2 daily digest). Skip only when BOTH are absent.
+  const webhookUrl = (await resolveWebhookUrl(clientUserId)) || defaultWebhookUrl;
   if (!webhookUrl) return { skipped: true, reason: 'no_webhook_url' };
 
   const clientName = await loadClientName(clientUserId, queryFn);
