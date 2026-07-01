@@ -1409,7 +1409,7 @@ router.get('/cost-summary', async (req, res) => {
       ${clientLabelJoins('r.client_user_id')}
       WHERE r.created_at >= ${monthExpr}
         AND r.created_at < (${monthExpr} + INTERVAL '1 month')
-      GROUP BY r.client_user_id, cp.client_identifier_value, ba.business_name, u.first_name, u.last_name, u.email, cp.ops_monthly_cap_cents
+      GROUP BY r.client_user_id, u.id, cp.client_identifier_value, ba.business_name, u.first_name, u.last_name, u.email, cp.ops_monthly_cap_cents
       ORDER BY mtd_cents DESC
     `;
 
