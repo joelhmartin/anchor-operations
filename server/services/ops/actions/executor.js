@@ -73,6 +73,24 @@ export async function executeAction({ recommendationId, userId, actorIsAdmin = t
     return { ok: false, status: rec.status, error: `recommendation already ${rec.status}` };
   }
 
+  // Malformed: mutating rec with no resolvable action — fail visibly rather than
+  // falsely acknowledging.
+  if (rec.mutating && !rec.abstract_action_type) {
+    await setRecommendationResult(recommendationId, { status: 'failed' });
+    return { ok: false, status: 'failed', error: 'mutating recommendation has no abstract_action_type' };
+  }
+
+  // True advisory: nothing to execute (no mapped action). Acknowledge = executed
+  // no-op + audit. Also correctly routes any future non-mutating actionable rec
+  // that has an abstract_action_type through to the resolve+execute path below.
+  if (!rec.abstract_action_type) {
+    if (rec.approval_id) await finalizeApproval(rec.approval_id, { ok: true, advisory: true });
+    await audit.auditApproved({ userId, recommendationId, approvalId: rec.approval_id, providerActionType: null });
+    await audit.auditExecuted({ userId, recommendationId, approvalId: rec.approval_id, providerActionType: null, success: true });
+    await setRecommendationResult(recommendationId, { status: 'executed', executedAt: new Date() });
+    return { ok: true, status: 'executed', advisory: true };
+  }
+
   const norm = {
     abstractActionType: rec.abstract_action_type,
     mutating: rec.mutating,

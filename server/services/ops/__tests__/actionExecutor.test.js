@@ -90,6 +90,49 @@ test('capabilities loaded from connectionStore shape flows to resolveAction', as
   assert.deepEqual(capsSeen, [{ provider: 'kinsta', capabilities: ['clear_cache'] }]);
 });
 
+test('advisory recommendation: Approve = acknowledge → executed + audit rows, no resolve/execute', async () => {
+  const h = harness({ mutating: false, abstract_action_type: null, approval_level: 'none', approval_id: null, status: 'proposed' });
+  let resolved = false, executed = false;
+  h.deps.resolve = async () => { resolved = true; return { ok: false, reason: 'should not be called' }; };
+  h.connector.actions.execute = async () => { executed = true; return {}; };
+  const out = await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+  assert.equal(out.ok, true);
+  assert.equal(out.status, 'executed');
+  assert.equal(out.advisory, true);
+  assert.equal(resolved, false, 'null action never resolved');
+  assert.equal(executed, false, 'connector.execute never called');
+  assert.equal(h.result.value.status, 'executed');
+  const types = h.events.map((e) => e[0]);
+  assert.deepEqual(types, ['approved', 'executed'], 'audit chain recorded for acknowledge');
+  assert.equal(h.events.find((e) => e[0] === 'executed')[1].success, true);
+});
+
+test('malformed mutating rec (no abstract_action_type) → failed, no tool_executed audit row', async () => {
+  const h = harness({ mutating: true, abstract_action_type: null, status: 'approved' });
+  let executed = false;
+  h.connector.actions.execute = async () => { executed = true; return {}; };
+  const out = await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+  assert.equal(out.ok, false);
+  assert.equal(out.status, 'failed');
+  assert.ok(out.error, 'error message present');
+  assert.equal(executed, false, 'connector.execute never called');
+  assert.equal(h.events.some((e) => e[0] === 'executed'), false, 'no tool_executed audit row written');
+});
+
+test('advisory recommendation with approval_id: finalizeApproval called + status executed', async () => {
+  const h = harness({ mutating: false, abstract_action_type: null, approval_level: 'none', approval_id: 'appr-advisory', status: 'proposed' });
+  let finalizedWith = null;
+  h.deps.finalizeApproval = async (id, payload) => { finalizedWith = { id, payload }; };
+  const out = await executeAction({ recommendationId: 'rec-1', userId: 'u1', actorIsAdmin: true }, h.deps);
+  assert.equal(out.ok, true);
+  assert.equal(out.status, 'executed');
+  assert.equal(out.advisory, true);
+  assert.ok(finalizedWith, 'finalizeApproval was called');
+  assert.equal(finalizedWith.id, 'appr-advisory');
+  assert.deepEqual(finalizedWith.payload, { ok: true, advisory: true });
+  assert.equal(h.result.value.status, 'executed');
+});
+
 test('executeAction: finalized status is not re-executable (executor-level defense)', async () => {
   for (const finalStatus of ['executed', 'rejected', 'failed']) {
     const h = harness({ status: finalStatus });
